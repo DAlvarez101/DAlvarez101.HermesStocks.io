@@ -17,6 +17,9 @@
   --accent2:#06b6d4;
   --danger:#ef4444;
   --warning:#f59e0b;
+  --purple:#8b5cf6;
+  --pink:#ec4899;
+  --orange:#f97316;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
@@ -26,19 +29,17 @@ h1{font-size:1.8rem;font-weight:700;margin-bottom:4px}
 .panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
 .panel h2{font-size:1.1rem;margin-bottom:16px;display:flex;align-items:center;gap:8px}
 .panel h2 .icon{font-size:1.2rem}
-.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
-.row > div{flex:1;min-width:160px}
 label{display:block;font-size:0.8rem;color:var(--text2);margin-bottom:6px;font-weight:500}
 input,select,button{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:0.95rem;outline:none;transition:border-color 0.2s}
 input:focus,select:focus{border-color:var(--accent)}
 button{cursor:pointer;font-weight:600;user-select:none}
 button.primary{background:var(--accent);border-color:var(--accent);color:#000}
 button.primary:hover{background:#059669}
-button.secondary{background:transparent;border-color:var(--border)}
-button.secondary:hover{border-color:var(--text2)}
+button.secondary{background:transparent;border-color:var(--border);color:var(--text)}
+button.secondary:hover{border-color:var(--text2);background:rgba(255,255,255,0.03)}
 button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
 button.danger:hover{background:#dc2626}
-.btn-row{display:flex;gap:10px;margin-top:16px}
+.btn-row{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
 .btn-row button{flex:0 auto;min-width:140px;width:auto}
 table{width:100%;border-collapse:collapse;font-size:0.9rem}
 th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
@@ -47,16 +48,14 @@ td{font-variant-numeric:tabular-nums}
 tr:hover td{background:rgba(255,255,255,0.02)}
 .positive{color:var(--accent)}
 .negative{color:var(--danger)}
-.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px}
-.chart-wrap{position:relative;height:320px}
-.small{font-size:0.8rem;color:var(--text2)}
+.neutral{color:var(--warning)}
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px}
+.chart-wrap{position:relative;height:340px}
+.small{font-size:0.8rem;color:var(--text2);line-height:1.6}
 .status{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:0.85rem}
 .status.ok{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);color:#6ee7b7}
 .status.err{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#fca5a5}
 .status.warn{background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);color:#fcd34d}
-.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600}
-.badge.ok{background:rgba(16,185,129,0.15);color:#6ee7b7}
-.badge.err{background:rgba(239,68,68,0.15);color:#fca5a5}
 .summary-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
 .card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px}
 .card .label{font-size:0.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
@@ -64,7 +63,6 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 .card .subv{font-size:0.8rem;color:var(--text2);margin-top:2px}
 .remove-btn{background:transparent;border:none;color:var(--danger);font-size:1.1rem;cursor:pointer;padding:4px 8px;border-radius:4px;width:auto;flex:0}
 .remove-btn:hover{background:rgba(239,68,68,0.1)}
-.ticker-chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);padding:4px 10px;border-radius:20px;font-size:0.85rem;margin:2px}
 .holding-row{display:flex;gap:12px;align-items:center;margin-bottom:10px;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px}
 .holding-row input{background:var(--bg2)}
 .holding-row > div{flex:1}
@@ -77,7 +75,21 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 .footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--border);text-align:center;color:var(--text2);font-size:0.8rem}
 a{color:var(--accent2);text-decoration:none}
 a:hover{text-decoration:underline}
-@media(max-width:600px){.container{padding:12px}h1{font-size:1.4rem}.chart-wrap{height:260px}}
+
+/* Heatmap styles */
+.heatmap-wrap{width:100%;overflow-x:auto}
+.heatmap-container{display:inline-block;position:relative}
+.heatmap-grid{display:grid;gap:2px}
+.heatmap-cell{width:48px;height:48px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:600;font-variant-numeric:tabular-nums;transition:transform 0.1s}
+.heatmap-cell:hover{transform:scale(1.08);z-index:2;box-shadow:0 0 8px rgba(0,0,0,0.5)}
+.heatmap-label{font-size:0.75rem;color:var(--text2);text-align:center;padding:4px 2px;white-space:nowrap}
+.heatmap-legend{display:flex;align-items:center;gap:8px;margin-top:12px;justify-content:center}
+.heatmap-legend-bar{width:200px;height:12px;border-radius:6px;background:linear-gradient(90deg,#3b82f6,#ffffff,#ef4444);display:inline-block}
+
+@media(max-width:600px){
+  .container{padding:12px}h1{font-size:1.4rem}.chart-wrap{height:260px}
+  .holding-row{flex-wrap:wrap}.holding-row > div:first-child{flex:1 1 100px}
+}
 </style>
 </head>
 <body>
@@ -124,6 +136,7 @@ a:hover{text-decoration:underline}
               <th>MCTR</th>
               <th>% Risk Contrib</th>
               <th>$ Risk Contrib</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -146,7 +159,14 @@ a:hover{text-decoration:underline}
       </div>
       <div class="panel">
         <h2><span class="icon">&#128200;</span> Correlation Heatmap</h2>
-        <div class="chart-wrap"><canvas id="corrChart"></canvas></div>
+        <div class="heatmap-wrap">
+          <div class="heatmap-container" id="heatmapContainer"></div>
+        </div>
+        <div class="heatmap-legend">
+          <span style="font-size:0.75rem;color:var(--text2)">-1</span>
+          <span class="heatmap-legend-bar"></span>
+          <span style="font-size:0.75rem;color:var(--text2)">+1</span>
+        </div>
       </div>
     </div>
 
@@ -154,9 +174,11 @@ a:hover{text-decoration:underline}
       <h2><span class="icon">&#8505;</span> Methodology</h2>
       <div class="small">
         <p><strong>Volatility</strong> is the annualized standard deviation of daily log returns over the last 252 trading days.</p>
-        <p><strong>MCTR (Marginal Contribution to Risk)</strong> = (Covariance_matrix * weights)_i / Portfolio_Volatility. It measures how much total portfolio risk changes if you increase the weight of asset i by a tiny amount.</p>
-        <p><strong>% Risk Contribution</strong> = (Weight_i * MCTR_i) / Portfolio_Volatility. These sum to 100% and show the proportional risk each asset contributes.</p>
-        <p><strong>$ Risk Contribution</strong> = % Risk Contribution * Total Portfolio Value. This is the dollar amount of risk attributable to each position.</p>
+        <p><strong>MCTR (Marginal Contribution to Risk)</strong> = (Covariance_matrix &times; weights)<sub>i</sub> / Portfolio_Volatility. It measures how much total portfolio risk changes if you increase the weight of asset i by a tiny amount.</p>
+        <p><strong>% Risk Contribution</strong> = (Weight<sub>i</sub> &times; MCTR<sub>i</sub>) / Portfolio_Volatility. These sum to 100% and show the proportional risk each asset contributes.</p>
+        <p><strong>$ Risk Contribution</strong> = % Risk Contribution &times; Total Portfolio Value. This is the dollar amount of risk attributable to each position.</p>
+        <p><strong>VaR (95%)</strong> = Portfolio Value &times; Portfolio Volatility &times; 1.645. Estimates the maximum one-day loss at 95% confidence.</p>
+        <p><strong>Expected Shortfall (CVaR 95%)</strong> = The average loss in the worst 5% of cases, estimated using the parametric formula.</p>
       </div>
     </div>
   </div>
@@ -168,8 +190,7 @@ a:hover{text-decoration:underline}
 
 <script>
 let chartInstances={};
-let currentPrices={};
-let currentReturns={};
+const colors=['#10b981','#06b6d4','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16','#d946ef','#22c55e'];
 
 function addRow(ticker='',amount=''){
   const div=document.createElement('div');
@@ -253,8 +274,9 @@ async function fetchYahooHistory(ticker){
 function generateDemoReturns(ticker){
   const rng=seededRandom(ticker);
   const days=252;
-  const vols={AAPL:0.25,MSFT:0.22,AMZN:0.30,GOOGL:0.24,NVDA:0.45,TSLA:0.55,JPM:0.18,BRK:0.16,UNH:0.20,JNJ:0.17};
-  const vol=vols[ticker]||0.25;
+  // Realistic annual vols from recent market data
+  const volMap={AAPL:0.22,MSFT:0.19,AMZN:0.28,GOOGL:0.24,NVDA:0.48,TSLA:0.52,JPM:0.18,BRK:0.15,UNH:0.20,JNJ:0.16,META:0.32,AMD:0.42,INTC:0.30,CRM:0.26,NFLX:0.35};
+  const vol=volMap[ticker]||0.25;
   const mu=0.08/252;
   const returns=[];
   for(let i=0;i<days;i++){
@@ -347,6 +369,10 @@ async function analyze(){
   const covMatrix=Array.from({length:n},()=>Array(n).fill(0));
   for(let i=0;i<n;i++)for(let j=0;j<n;j++)covMatrix[i][j]=covariance(trimmed[i],trimmed[j])*252;
 
+  // Correlation matrix
+  const corrMatrix=Array.from({length:n},()=>Array(n).fill(0));
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++)corrMatrix[i][j]=covMatrix[i][j]/(vols[i]*vols[j]);
+
   const portfolioVar=weights.reduce((sum,wi,i)=>sum+wi*weights.reduce((s2,wj,j)=>s2+wj*covMatrix[i][j],0),0);
   const portfolioStd=Math.sqrt(portfolioVar);
 
@@ -359,15 +385,20 @@ async function analyze(){
   const pctContrib=tickers.map((t,i)=>weights[i]*mctr[i]/portfolioStd);
   const dollarContrib=tickers.map((t,i)=>pctContrib[i]*totalValue);
 
+  // VaR and CVaR at 95%
+  const z95=1.645;
+  const oneDayStd=portfolioStd/Math.sqrt(252);
+  const var95=totalValue*oneDayStd*z95;
+  const cvar95=totalValue*oneDayStd*Math.exp(-z95*z95/2)/(0.05*Math.sqrt(2*Math.PI)); // Parametric ES
+
   renderTable(holdings,weights,vols,mctr,pctContrib,dollarContrib);
-  renderSummaryCards(portfolioStd,totalValue,tickers,vols,weights);
-  renderCharts(holdings,weights,vols,pctContrib,covMatrix,tickers);
+  renderSummaryCards(portfolioStd,totalValue,tickers,vols,weights,var95,cvar95);
+  renderCharts(holdings,weights,vols,pctContrib,tickers);
+  renderHeatmap(corrMatrix,tickers);
 
   document.getElementById('results').classList.remove('hidden');
   document.getElementById('analyzeText').textContent='Analyze Risk';
-
-  currentPrices={};
-  currentReturns=returnsMap;
+  window.scrollTo({top:document.getElementById('results').offsetTop-20,behavior:'smooth'});
 }
 
 function renderTable(holdings,weights,vols,mctr,pct,dollar){
@@ -375,17 +406,20 @@ function renderTable(holdings,weights,vols,mctr,pct,dollar){
   tbody.innerHTML='';
   holdings.forEach((h,i)=>{
     const row=document.createElement('tr');
+    const status=pct[i]>weights[i]+0.02?'Overweight Risk':(pct[i]<weights[i]-0.02?'Underweight Risk':'Balanced');
+    const statusClass=pct[i]>weights[i]+0.02?'negative':(pct[i]<weights[i]-0.02?'positive':'neutral');
     row.innerHTML=`<td><strong>${h.ticker}</strong></td>
       <td>${(weights[i]*100).toFixed(1)}%</td>
       <td>${(vols[i]*100).toFixed(1)}%</td>
       <td>${(mctr[i]*100).toFixed(2)}%</td>
-      <td class="${pct[i]>weights[i]?'negative':(pct[i]<weights[i]?'positive':'')}">${(pct[i]*100).toFixed(1)}%</td>
-      <td>$${dollar[i].toLocaleString(undefined,{maximumFractionDigits:0})}</td>`;
+      <td>${(pct[i]*100).toFixed(1)}%</td>
+      <td>$${dollar[i].toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+      <td class="${statusClass}">${status}</td>`;
     tbody.appendChild(row);
   });
 }
 
-function renderSummaryCards(portfolioStd,totalValue,tickers,vols,weights){
+function renderSummaryCards(portfolioStd,totalValue,tickers,vols,weights,var95,cvar95){
   const div=document.getElementById('summaryCards');
 
   let html=`<div class="card"><div class="label">Portfolio Volatility</div><div class="value">${(portfolioStd*100).toFixed(1)}%</div><div class="subv">Annualized std dev</div></div>`;
@@ -394,24 +428,26 @@ function renderSummaryCards(portfolioStd,totalValue,tickers,vols,weights){
   const weightedDiv=weights.reduce((s,w,i)=>s+w*vols[i],0);
   html+=`<div class="card"><div class="label">Diversification Benefit</div><div class="value">${((weightedDiv-portfolioStd)*100).toFixed(1)}%</div><div class="subv">Vol reduction from correlation</div></div>`;
 
+  html+=`<div class="card"><div class="label">VaR (95%, 1-day)</div><div class="value ${var95/totalValue>0.03?'negative':''}">$${var95.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div class="subv">Max expected daily loss</div></div>`;
+  html+=`<div class="card"><div class="label">Expected Shortfall (95%)</div><div class="value ${cvar95/totalValue>0.04?'negative':''}">$${cvar95.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div class="subv">Avg loss in worst 5% cases</div></div>`;
+
   div.innerHTML=html;
 }
 
-function renderCharts(holdings,weights,vols,pctContrib,covMatrix,tickers){
+function renderCharts(holdings,weights,vols,pctContrib,tickers){
   const labels=holdings.map(h=>h.ticker);
-  const colors=['#10b981','#06b6d4','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16'];
 
   // Contribution donut
   destroyChart('contribChart');
-  new Chart(document.getElementById('contribChart'),{
+  chartInstances['contribChart'] = new Chart(document.getElementById('contribChart'),{
     type:'doughnut',
     data:{labels,datasets:[{data:pctContrib.map(x=>x*100),backgroundColor:colors.slice(0,labels.length),borderWidth:0}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#e2e8f0'}}}}
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#e2e8f0',font:{size:11}}},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${ctx.raw.toFixed(1)}%`}}}}
   });
 
   // Weight vs Risk bar
   destroyChart('weightVsRiskChart');
-  new Chart(document.getElementById('weightVsRiskChart'),{
+  chartInstances['weightVsRiskChart'] = new Chart(document.getElementById('weightVsRiskChart'),{
     type:'bar',
     data:{
       labels,
@@ -425,42 +461,63 @@ function renderCharts(holdings,weights,vols,pctContrib,covMatrix,tickers){
 
   // Allocation pie
   destroyChart('allocationChart');
-  new Chart(document.getElementById('allocationChart'),{
+  chartInstances['allocationChart'] = new Chart(document.getElementById('allocationChart'),{
     type:'pie',
     data:{labels,datasets:[{data:weights.map(w=>w*100),backgroundColor:colors.slice(0,labels.length),borderWidth:0}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#e2e8f0'}}}}
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#e2e8f0',font:{size:11}}},tooltip:{callbacks:{label:(ctx)=>`${ctx.label}: ${ctx.raw.toFixed(1)}%`}}}}
   });
+}
 
-  // Correlation heatmap
-  destroyChart('corrChart');
-  new Chart(document.getElementById('corrChart'),{
-    type:'bar',
-    data:{
-      labels:tickers,
-      datasets:tickers.map((t,i)=>({
-        label:t,
-        data:tickers.map((_,j)=>{
-          const corr=covMatrix[i][j]/(vols[i]*vols[j]);
-          return corr;
-        }),
-        backgroundColor:tickers.map((_,j)=>{
-          const corr=covMatrix[i][j]/(vols[i]*vols[j]);
-          const r=Math.round(239+(16-239)*corr);
-          const g=Math.round(68+(185-68)*corr);
-          const b=Math.round(68+(129-68)*corr);
-          return `rgb(${r},${g},${b})`;
-        }),
-        borderWidth:0
-      }))
-    },
-    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',scales:{x:{ticks:{color:'#94a3b8'},grid:{color:'#334155'},min:-1,max:1},y:{ticks:{color:'#94a3b8'},grid:{color:'#334155'}}},plugins:{legend:{display:false}}}
-  });
+function renderHeatmap(corrMatrix,tickers){
+  const container=document.getElementById('heatmapContainer');
+  const n=tickers.length;
+  const gridSize=48;
+  const labelWidth=60;
+  const labelHeight=28;
+  const gap=2;
+
+  // Build HTML grid
+  let html=`<div class="heatmap-grid" style="grid-template-columns:repeat(${n+1},${gridSize+gap}px);grid-template-rows:repeat(${n+1},${gridSize+gap}px)">`;
+
+  // Top-left empty cell
+  html+=`<div style="width:${labelWidth}px;height:${labelHeight}px"></div>`;
+
+  // Top labels (column headers)
+  for(let j=0;j<n;j++){
+    html+=`<div class="heatmap-label" style="width:${gridSize}px">${tickers[j]}</div>`;
+  }
+
+  // Rows
+  for(let i=0;i<n;i++){
+    // Row label
+    html+=`<div class="heatmap-label" style="width:${labelWidth}px;text-align:right;padding-right:6px">${tickers[i]}</div>`;
+    for(let j=0;j<n;j++){
+      const corr=corrMatrix[i][j];
+      // Color scale: blue (-1) -> white (0) -> red (+1)
+      let r,g,b;
+      if(corr<0){
+        const t=-corr;
+        r=Math.round(59+(255-59)*t);
+        g=Math.round(130+(255-130)*t);
+        b=Math.round(246+(255-246)*t);
+      }else{
+        const t=corr;
+        r=255;
+        g=Math.round(255+(68-255)*t);
+        b=Math.round(255+(68-255)*t);
+      }
+      const color=`rgb(${r},${g},${b})`;
+      const textColor=(corr>0.5||corr<-0.5)?'#fff':'#0f172a';
+      html+=`<div class="heatmap-cell" style="background:${color};color:${textColor};width:${gridSize}px;height:${gridSize}px" title="${tickers[i]} vs ${tickers[j]}: ${corr.toFixed(2)}">${corr.toFixed(2)}</div>`;
+    }
+  }
+
+  html+='</div>';
+  container.innerHTML=html;
 }
 
 function destroyChart(id){
   if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}
-  const el=document.getElementById(id);
-  if(el) chartInstances[id]=null;
 }
 
 // init
