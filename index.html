@@ -282,7 +282,11 @@ async function fetchYahooHistory(ticker,proxyIndex=0){
   for(let p=proxyIndex;p<proxies.length;p++){
     const url=proxies[p](base);
     try{
-      const res=await fetch(url,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(12000)});
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),8000);
+      try{
+        var res=await fetch(url,{headers:{'Accept':'application/json'},signal:controller.signal});
+      }finally{clearTimeout(timer);}
       if(!res.ok){lastErr=`HTTP ${res.status} via ${proxyName[p]}`;continue;}
       const data=await res.json();
       if(data.chart&&data.chart.error){
@@ -362,6 +366,7 @@ function destroyChart(key){
 }
 
 async function autoAnalyzeWithFallback(){
+  try{
   const holdings=getHoldings();
   if(holdings.length<2){showStatus('err','Please enter at least 2 holdings.');return;}
   saveToStorage();
@@ -406,9 +411,17 @@ async function autoAnalyzeWithFallback(){
       await runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
     },800);
   }
+  }catch(e){
+    console.error('Auto-analysis error:',e);
+    showStatus('err','Analysis failed: '+e.message);
+  }finally{
+    document.getElementById('analyzeBtn').disabled=false;
+    document.getElementById('analyzeText').textContent='Analyze Risk';
+  }
 }
 
 async function runAnalysis({tickers,weights,totalValue,returnsMap,mode}){
+  try{
   const n=tickers.length;
   const minLen=Math.min(...tickers.map(t=>returnsMap[t].length));
   const trimmed=tickers.map(t=>returnsMap[t].slice(-minLen));
@@ -450,7 +463,7 @@ async function runAnalysis({tickers,weights,totalValue,returnsMap,mode}){
     try{
       const spxHist=await fetchYahooHistory('^GSPC',0);
       spxReturns=calcLogReturns(spxHist.map(x=>x.price)).slice(-minLen);
-    }catch(e){/* ignore */}
+    }catch(e){/* ignore — betas will use fallback table */}
   }
   const spxVol=spxReturns?std(spxReturns)*Math.sqrt(252):0.16;
   const betas=tickers.map((t,i)=>{
@@ -492,8 +505,13 @@ async function runAnalysis({tickers,weights,totalValue,returnsMap,mode}){
   renderScenarios(lastAnalysis);
 
   document.getElementById('results').classList.remove('hidden');
-  document.getElementById('analyzeBtn').disabled=false;
-  document.getElementById('analyzeText').textContent='Analyze Risk';
+  }catch(e){
+    console.error('Analysis error:',e);
+    showStatus('err','Analysis failed: '+e.message);
+  }finally{
+    document.getElementById('analyzeBtn').disabled=false;
+    document.getElementById('analyzeText').textContent='Analyze Risk';
+  }
 }
 
 async function analyze(){
@@ -508,7 +526,7 @@ async function analyze(){
     const returnsMap={};
     tickers.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
     showStatus('ok','Demo mode: using synthetic historical returns');
-    runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
+    await runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
   }else{
     await autoAnalyzeWithFallback();
   }
