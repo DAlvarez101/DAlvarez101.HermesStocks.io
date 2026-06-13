@@ -268,18 +268,44 @@ function loadFromStorage(){
   }catch(e){addRow();}
 }
 
-async function fetchYahooHistory(ticker){
-  const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2y&events=history`;
-  const res=await fetch(url,{headers:{'Accept':'application/json'}});
-  if(!res.ok) throw new Error(`HTTP ${res.status} for ${ticker}`);
-  const data=await res.json();
-  if(!data.chart||!data.chart.result||!data.chart.result[0]) throw new Error(`No data for ${ticker}`);
-  const result=data.chart.result[0];
-  const timestamps=result.timestamp;
-  const prices=result.indicators.quote[0].close;
-  const pairs=timestamps.map((t,i)=>({date:t,price:prices[i]})).filter(x=>x.price!=null);
-  if(pairs.length<60) throw new Error(`Insufficient history for ${ticker}`);
-  return pairs;
+async function fetchYahooHistory(ticker,proxyIndex=0){
+  const encoded=encodeURIComponent(ticker);
+  const base=`https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=2y&events=history`;
+  const proxies=[
+    u=>u,
+    u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+  ];
+  const proxyName=['direct','corsproxy.io','allorigins.win','codetabs'];
+  let lastErr='';
+  for(let p=proxyIndex;p<proxies.length;p++){
+    const url=proxies[p](base);
+    try{
+      const res=await fetch(url,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(12000)});
+      if(!res.ok){lastErr=`HTTP ${res.status} via ${proxyName[p]}`;continue;}
+      const data=await res.json();
+      if(data.chart&&data.chart.error){
+        if(data.chart.error.code==='Not Found') throw new Error(`${ticker} not found`);
+        lastErr=`Yahoo error ${data.chart.error.code||''} via ${proxyName[p]}`;
+        continue;
+      }
+      if(!data.chart||!data.chart.result||!data.chart.result[0]){
+        lastErr=`No data structure via ${proxyName[p]}`;
+        continue;
+      }
+      const result=data.chart.result[0];
+      const timestamps=result.timestamp;
+      const prices=result.indicators.quote[0].close;
+      const pairs=timestamps.map((t,i)=>({date:t,price:prices[i]})).filter(x=>x.price!=null);
+      if(pairs.length<60){lastErr=`Only ${pairs.length} points via ${proxyName[p]}`;continue;}
+      return pairs;
+    }catch(e){
+      lastErr=`${e.name||'Error'} via ${proxyName[p]}: ${e.message||''}`;
+      if(p<proxies.length-1) await new Promise(r=>setTimeout(r,400));
+    }
+  }
+  throw new Error(lastErr||'All fetch attempts failed');
 }
 
 function seededRandom(str){
@@ -294,7 +320,7 @@ function seededRandom(str){
 function generateDemoReturns(ticker){
   const rng=seededRandom(ticker);
   const days=504;
-  const vols={AAPL:0.25,MSFT:0.22,AMZN:0.30,GOOGL:0.24,NVDA:0.45,TSLA:0.55,JPM:0.18,BRK:0.16,UNH:0.20,JNJ:0.17,META:0.32,NFLX:0.38};
+  const vols={AAPL:0.25,MSFT:0.22,AMZN:0.30,GOOGL:0.24,NVDA:0.45,TSLA:0.55,JPM:0.18,BRK:0.16,UNH:0.20,JNJ:0.17,META:0.32,NFLX:0.38,RIVN:0.60,PLTR:0.55,AMD:0.50,COIN:0.65};
   const vol=vols[ticker]||0.25;
   const mu=0.08/252;
   const returns=[];
@@ -335,99 +361,89 @@ function destroyChart(key){
   }
 }
 
-async function analyze(){
+async function autoAnalyzeWithFallback(){
   const holdings=getHoldings();
-  if(holdings.length<2){
-    showStatus('err','Please enter at least 2 holdings with dollar amounts.');
-    return;
-  }
+  if(holdings.length<2){showStatus('err','Please enter at least 2 holdings.');return;}
   saveToStorage();
-
-  const mode=document.getElementById('modeSelect').value;
   const tickers=holdings.map(h=>h.ticker);
   const totalValue=holdings.reduce((s,h)=>s+h.amount,0);
   const weights=holdings.map(h=>h.amount/totalValue);
 
-  setStatus('','Fetching data and calculating risk metrics...');
+  setStatus('','Fetching live data (trying direct + CORS proxies)...');
   const btn=document.getElementById('analyzeBtn');
   btn.disabled=true;
-  document.getElementById('analyzeText').innerHTML='<span class="spinner"></span> Analyzing...';
+  document.getElementById('analyzeText').innerHTML='<span class="spinner"></span> Fetching...';
 
   const returnsMap={};
   const failed=[];
+  const succeeded=[];
 
-  if(mode==='demo'){
-    tickers.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
-    showStatus('ok','Demo mode: using synthetic historical returns');
-  }else{
-    for(const t of tickers){
-      try{
-        const hist=await fetchYahooHistory(t);
-        returnsMap[t]=calcLogReturns(hist.map(x=>x.price));
-      }catch(e){failed.push(`${t}: ${e.message}`);}
-      await new Promise(r=>setTimeout(r,350));
+  for(const t of tickers){
+    try{
+      const hist=await fetchYahooHistory(t,0);
+      returnsMap[t]=calcLogReturns(hist.map(x=>x.price));
+      succeeded.push(t);
+    }catch(e){
+      failed.push(`${t}: ${e.message}`);
     }
-    if(Object.keys(returnsMap).length<2){
-      showStatus('err',`Could not fetch enough data. Errors: ${failed.join('; ')}. Switch to Demo mode.`);
-      btn.disabled=false;
-      document.getElementById('analyzeText').textContent='Analyze Risk';
-      return;
-    }
-    if(failed.length) showStatus('warn',`Partial data: ${failed.join('; ')}`);
-    else showStatus('ok','Live data loaded from Yahoo Finance');
+    await new Promise(r=>setTimeout(r,350));
   }
 
+  if(Object.keys(returnsMap).length>=2){
+    if(failed.length) showStatus('warn',`Partial live data. Success: ${succeeded.join(', ')}. Failed: ${failed.join('; ')}`);
+    else showStatus('ok','Live data loaded via Yahoo Finance');
+    runAnalysis({tickers,weights,totalValue,returnsMap,mode:'live'});
+  }else{
+    showStatus('err',`Live data unavailable. ${failed.join('; ')}. Auto-switching to Demo mode...`);
+    setTimeout(()=>{
+      tickers.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
+      showStatus('ok','Demo mode: using synthetic historical returns (Yahoo API blocked by browser CORS)');
+      runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
+    },800);
+  }
+}
+
+async function runAnalysis({tickers,weights,totalValue,returnsMap,mode}){
   const n=tickers.length;
   const minLen=Math.min(...tickers.map(t=>returnsMap[t].length));
   const trimmed=tickers.map(t=>returnsMap[t].slice(-minLen));
 
-  // Volatilities
   const vols=tickers.map((t,i)=>std(trimmed[i])*Math.sqrt(252));
 
-  // Covariance matrix (annualized)
   const covMatrix=Array.from({length:n},()=>Array(n).fill(0));
   for(let i=0;i<n;i++)for(let j=0;j<n;j++)covMatrix[i][j]=covariance(trimmed[i],trimmed[j])*252;
 
-  // Portfolio volatility
   let portfolioVar=0;
   for(let i=0;i<n;i++)for(let j=0;j<n;j++) portfolioVar+=weights[i]*weights[j]*covMatrix[i][j];
   const portfolioStd=Math.sqrt(portfolioVar);
 
-  // MCTR
   const mctr=tickers.map((t,i)=>{
     let sum=0;
     for(let j=0;j<n;j++) sum+=covMatrix[i][j]*weights[j];
     return sum/portfolioStd;
   });
 
-  // Percent and dollar contribution
   const pctContrib=tickers.map((t,i)=>(weights[i]*mctr[i])/portfolioStd);
   const dollarContrib=pctContrib.map(p=>p*totalValue);
-
-  // Correlation matrix
   const corrMatrix=tickers.map((t,i)=>tickers.map((_,j)=>covMatrix[i][j]/(vols[i]*vols[j])));
 
-  // Historical portfolio returns
   const portfolioDailyReturns=trimmed[0].map((_,day)=>weights.reduce((sum,w,i)=>sum+w*trimmed[i][day],0));
   const sortedPortfolioReturns=[...portfolioDailyReturns].sort((a,b)=>a-b);
 
-  // VaR (parametric and historical)
   const parametricVaR95=portfolioStd/Math.sqrt(252)*1.645;
   const parametricVaR99=portfolioStd/Math.sqrt(252)*2.326;
   const histVaR95=-percentile(sortedPortfolioReturns,0.05);
   const histVaR99=-percentile(sortedPortfolioReturns,0.01);
 
-  // CVaR / Expected Shortfall
   const worst5=sortedPortfolioReturns.filter(r=>r<=percentile(sortedPortfolioReturns,0.05));
   const worst1=sortedPortfolioReturns.filter(r=>r<=percentile(sortedPortfolioReturns,0.01));
   const cvar95=worst5.length?-mean(worst5):0;
   const cvar99=worst1.length?-mean(worst1):0;
 
-  // Beta relative to S&P 500 (simulated for demo, or fetched for live)
   let spxReturns=null;
   if(mode!=='demo'){
     try{
-      const spxHist=await fetchYahooHistory('^GSPC');
+      const spxHist=await fetchYahooHistory('^GSPC',0);
       spxReturns=calcLogReturns(spxHist.map(x=>x.price)).slice(-minLen);
     }catch(e){/* ignore */}
   }
@@ -436,21 +452,17 @@ async function analyze(){
     if(spxReturns&&spxReturns.length===trimmed[i].length){
       return (covariance(trimmed[i],spxReturns)*252)/(spxVol*spxVol);
     }
-    // Fallback simulated beta
-    const fallback={AAPL:1.2,MSFT:1.05,AMZN:1.3,GOOGL:1.1,NVDA:1.8,TSLA:2.2,JPM:1.0,BRK:0.9,UNH:0.7,JNJ:0.6,META:1.4,NFLX:1.3};
+    const fallback={AAPL:1.2,MSFT:1.05,AMZN:1.3,GOOGL:1.1,NVDA:1.8,TSLA:2.2,JPM:1.0,BRK:0.9,UNH:0.7,JNJ:0.6,META:1.4,NFLX:1.3,RIVN:1.5,PLTR:1.6,AMD:1.7,COIN:2.0};
     return fallback[t]||1.0;
   });
 
-  // Sharpe ratio (assume 4% risk-free)
   const sharpeRatios=tickers.map((t,i)=>{
     const annReturn=mean(trimmed[i])*252;
     return vols[i]>0?(annReturn-0.04)/vols[i]:0;
   });
 
-  // Herfindahl index (concentration)
   const hhi=weights.reduce((s,w)=>s+w*w,0);
 
-  // Stress scenarios
   const scenarios=[
     {name:'2008 Crisis',shock:-0.40,desc:'Global financial crisis level drawdown'},
     {name:'COVID Crash',shock:-0.34,desc:'March 2020 market collapse'},
@@ -461,16 +473,13 @@ async function analyze(){
   ];
 
   const scenarioResults=scenarios.map(sc=>{
-    // Apply shock proportionally to beta
     const weightedShock=weights.reduce((s,w,i)=>s+w*betas[i]*sc.shock,0);
     const portfolioImpact=weightedShock*totalValue;
     return{...sc,impact:portfolioImpact,percent:weightedShock*100};
   });
 
-  // Store for export
   lastAnalysis={holdings,tickers,weights,vols,mctr,pctContrib,dollarContrib,portfolioStd,totalValue,corrMatrix,betas,sharpeRatios,hhi,scenarioResults,parametricVaR95,parametricVaR99,histVaR95,histVaR99,cvar95,cvar99};
 
-  // Render
   renderTable(lastAnalysis);
   renderSummaryCards(lastAnalysis);
   renderCharts(lastAnalysis);
@@ -478,8 +487,26 @@ async function analyze(){
   renderScenarios(lastAnalysis);
 
   document.getElementById('results').classList.remove('hidden');
-  btn.disabled=false;
+  document.getElementById('analyzeBtn').disabled=false;
   document.getElementById('analyzeText').textContent='Analyze Risk';
+}
+
+async function analyze(){
+  const mode=document.getElementById('modeSelect').value;
+  if(mode==='demo'){
+    const holdings=getHoldings();
+    if(holdings.length<2){showStatus('err','Please enter at least 2 holdings.');return;}
+    saveToStorage();
+    const tickers=holdings.map(h=>h.ticker);
+    const totalValue=holdings.reduce((s,h)=>s+h.amount,0);
+    const weights=holdings.map(h=>h.amount/totalValue);
+    const returnsMap={};
+    tickers.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
+    showStatus('ok','Demo mode: using synthetic historical returns');
+    runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
+  }else{
+    await autoAnalyzeWithFallback();
+  }
 }
 
 function renderTable(data){
