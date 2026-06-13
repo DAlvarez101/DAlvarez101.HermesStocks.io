@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Risk Analyzer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0b0e14;
+  --bg2:#111827;
+  --bg3:#1e293b;
+  --border:#334155;
+  --text:#e2e8f0;
+  --text2:#94a3b8;
+  --accent:#10b981;
+  --accent2:#06b6d4;
+  --danger:#ef4444;
+  --warning:#f59e0b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:1200px;margin:0 auto;padding:24px}
+h1{font-size:1.8rem;font-weight:700;margin-bottom:4px}
+.sub{color:var(--text2);font-size:0.9rem;margin-bottom:24px}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+.panel h2{font-size:1.1rem;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.panel h2 .icon{font-size:1.2rem}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+.row > div{flex:1;min-width:160px}
+label{display:block;font-size:0.8rem;color:var(--text2);margin-bottom:6px;font-weight:500}
+input,select,button{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:0.95rem;outline:none;transition:border-color 0.2s}
+input:focus,select:focus{border-color:var(--accent)}
+button{cursor:pointer;font-weight:600;user-select:none}
+button.primary{background:var(--accent);border-color:var(--accent);color:#000}
+button.primary:hover{background:#059669}
+button.secondary{background:transparent;border-color:var(--border)}
+button.secondary:hover{border-color:var(--text2)}
+button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+button.danger:hover{background:#dc2626}
+.btn-row{display:flex;gap:10px;margin-top:16px}
+.btn-row button{flex:0 auto;min-width:140px;width:auto}
+table{width:100%;border-collapse:collapse;font-size:0.9rem}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--text2);font-weight:600;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.02em}
+td{font-variant-numeric:tabular-nums}
+tr:hover td{background:rgba(255,255,255,0.02)}
+.positive{color:var(--accent)}
+.negative{color:var(--danger)}
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px}
+.chart-wrap{position:relative;height:320px}
+.small{font-size:0.8rem;color:var(--text2)}
+.status{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;margin-bottom:16px;font-size:0.85rem}
+.status.ok{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);color:#6ee7b7}
+.status.err{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#fca5a5}
+.status.warn{background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);color:#fcd34d}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600}
+.badge.ok{background:rgba(16,185,129,0.15);color:#6ee7b7}
+.badge.err{background:rgba(239,68,68,0.15);color:#fca5a5}
+.summary-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:16px}
+.card .label{font-size:0.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px}
+.card .value{font-size:1.5rem;font-weight:700}
+.card .subv{font-size:0.8rem;color:var(--text2);margin-top:2px}
+.remove-btn{background:transparent;border:none;color:var(--danger);font-size:1.1rem;cursor:pointer;padding:4px 8px;border-radius:4px;width:auto;flex:0}
+.remove-btn:hover{background:rgba(239,68,68,0.1)}
+.ticker-chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);padding:4px 10px;border-radius:20px;font-size:0.85rem;margin:2px}
+.holding-row{display:flex;gap:12px;align-items:center;margin-bottom:10px;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px}
+.holding-row input{background:var(--bg2)}
+.holding-row > div{flex:1}
+.holding-row > div:first-child{flex:0 0 140px}
+.holding-row > div:last-child{flex:0 0 auto}
+.add-btn{margin-top:8px}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none}
+.footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--border);text-align:center;color:var(--text2);font-size:0.8rem}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+@media(max-width:600px){.container{padding:12px}h1{font-size:1.4rem}.chart-wrap{height:260px}}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Portfolio Risk Analyzer</h1>
+  <div class="sub">Enter your holdings to see how much each stock contributes to total portfolio risk</div>
+
+  <div id="statusBar"></div>
+
+  <div class="panel">
+    <h2><span class="icon">+</span> Portfolio Holdings</h2>
+    <div id="holdings"></div>
+    <div class="btn-row">
+      <button class="secondary add-btn" onclick="addRow()">+ Add Holding</button>
+      <button class="secondary" onclick="loadDemo()">Load Demo Portfolio</button>
+      <button class="secondary" onclick="clearAll()">Clear All</button>
+    </div>
+    <div style="margin-top:14px">
+      <label>Data Mode</label>
+      <select id="modeSelect">
+        <option value="live">Live Data (Yahoo Finance)</option>
+        <option value="demo">Demo Mode (Synthetic Data)</option>
+      </select>
+    </div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="primary" onclick="analyze()">
+        <span id="analyzeText">Analyze Risk</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="summary-cards" id="summaryCards"></div>
+
+    <div class="panel">
+      <h2><span class="icon">&#128202;</span> Risk Contributions</h2>
+      <div style="overflow-x:auto">
+        <table id="riskTable">
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Weight</th>
+              <th>Volatility</th>
+              <th>MCTR</th>
+              <th>% Risk Contrib</th>
+              <th>$ Risk Contrib</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="panel">
+        <h2><span class="icon">&#9670;</span> Risk Contribution Breakdown</h2>
+        <div class="chart-wrap"><canvas id="contribChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2><span class="icon">&#9632;</span> Weight vs Risk</h2>
+        <div class="chart-wrap"><canvas id="weightVsRiskChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2><span class="icon">&#9679;</span> Portfolio Allocation</h2>
+        <div class="chart-wrap"><canvas id="allocationChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2><span class="icon">&#128200;</span> Correlation Heatmap</h2>
+        <div class="chart-wrap"><canvas id="corrChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="icon">&#8505;</span> Methodology</h2>
+      <div class="small">
+        <p><strong>Volatility</strong> is the annualized standard deviation of daily log returns over the last 252 trading days.</p>
+        <p><strong>MCTR (Marginal Contribution to Risk)</strong> = (Covariance_matrix * weights)_i / Portfolio_Volatility. It measures how much total portfolio risk changes if you increase the weight of asset i by a tiny amount.</p>
+        <p><strong>% Risk Contribution</strong> = (Weight_i * MCTR_i) / Portfolio_Volatility. These sum to 100% and show the proportional risk each asset contributes.</p>
+        <p><strong>$ Risk Contribution</strong> = % Risk Contribution * Total Portfolio Value. This is the dollar amount of risk attributable to each position.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Built with Hermes multi-agent orchestration &middot; Data from Yahoo Finance &middot; <a href="https://github.com/DAlvarez101/DAlvarez101.HermesStocks.io">Source</a>
+  </div>
+</div>
+
+<script>
+let chartInstances={};
+let currentPrices={};
+let currentReturns={};
+
+function addRow(ticker='',amount=''){
+  const div=document.createElement('div');
+  div.className='holding-row';
+  div.innerHTML=`<div><label>Ticker Symbol</label><input type="text" placeholder="e.g. AAPL" value="${ticker}" class="ticker" style="text-transform:uppercase"></div>
+    <div><label>Dollar Amount ($)</label><input type="number" placeholder="10000" value="${amount}" class="amount" min="0" step="0.01"></div>
+    <div><button class="remove-btn danger" onclick="this.closest('.holding-row').remove()">&times;</button></div>`;
+  document.getElementById('holdings').appendChild(div);
+}
+
+function clearAll(){
+  document.getElementById('holdings').innerHTML='';
+  document.getElementById('results').classList.add('hidden');
+  setStatus('');
+}
+
+function loadDemo(){
+  document.getElementById('holdings').innerHTML='';
+  document.getElementById('modeSelect').value='demo';
+  addRow('AAPL','25000');
+  addRow('MSFT','20000');
+  addRow('AMZN','15000');
+  addRow('GOOGL','15000');
+  addRow('NVDA','25000');
+  setStatus('ok','Demo portfolio loaded. Click "Analyze Risk" to see results with synthetic data.');
+}
+
+function setStatus(type,msg){
+  const bar=document.getElementById('statusBar');
+  if(!msg){bar.innerHTML='';return}
+  bar.innerHTML=`<div class="status ${type}"><span class="spinner"></span>${msg}</div>`;
+}
+
+function showStatus(type,msg){
+  const bar=document.getElementById('statusBar');
+  bar.innerHTML=`<div class="status ${type}">${msg}</div>`;
+}
+
+function getHoldings(){
+  const rows=document.querySelectorAll('.holding-row');
+  const h=[];
+  rows.forEach(r=>{
+    const t=r.querySelector('.ticker').value.trim().toUpperCase();
+    const a=parseFloat(r.querySelector('.amount').value);
+    if(t&&!isNaN(a)&&a>0) h.push({ticker:t,amount:a});
+  });
+  return h;
+}
+
+function saveToStorage(){
+  const h=getHoldings();
+  localStorage.setItem('portfolioRisk_holdings',JSON.stringify(h));
+  localStorage.setItem('portfolioRisk_mode',document.getElementById('modeSelect').value);
+}
+
+function loadFromStorage(){
+  try{
+    const h=JSON.parse(localStorage.getItem('portfolioRisk_holdings')||'[]');
+    const mode=localStorage.getItem('portfolioRisk_mode')||'live';
+    document.getElementById('modeSelect').value=mode;
+    if(h.length){h.forEach(x=>addRow(x.ticker,x.amount));}
+    else{addRow();}
+  }catch(e){addRow();}
+}
+
+async function fetchYahooHistory(ticker){
+  const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1y&events=history`;
+  const res=await fetch(url,{headers:{'Accept':'application/json'}});
+  if(!res.ok) throw new Error(`HTTP ${res.status} for ${ticker}`);
+  const data=await res.json();
+  if(!data.chart||!data.chart.result||!data.chart.result[0]){
+    throw new Error(`No data for ${ticker}`);
+  }
+  const result=data.chart.result[0];
+  const timestamps=result.timestamp;
+  const prices=result.indicators.quote[0].close;
+  const pairs=timestamps.map((t,i)=>({date:t,price:prices[i]})).filter(x=>x.price!=null);
+  return pairs;
+}
+
+function generateDemoReturns(ticker){
+  const rng=seededRandom(ticker);
+  const days=252;
+  const vols={AAPL:0.25,MSFT:0.22,AMZN:0.30,GOOGL:0.24,NVDA:0.45,TSLA:0.55,JPM:0.18,BRK:0.16,UNH:0.20,JNJ:0.17};
+  const vol=vols[ticker]||0.25;
+  const mu=0.08/252;
+  const returns=[];
+  for(let i=0;i<days;i++){
+    const u1=rng(),u2=rng();
+    const z=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+    returns.push(mu+vol/Math.sqrt(252)*z);
+  }
+  return returns;
+}
+
+function seededRandom(str){
+  let h=0;
+  for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;
+  return function(){
+    h=(h*1103515245+12345)>>>0;
+    return h/4294967296;
+  };
+}
+
+function calcLogReturns(prices){
+  const ret=[];
+  for(let i=1;i<prices.length;i++){
+    ret.push(Math.log(prices[i]/prices[i-1]));
+  }
+  return ret;
+}
+
+function mean(arr){return arr.reduce((a,b)=>a+b,0)/arr.length}
+
+function std(arr){
+  const m=mean(arr);
+  return Math.sqrt(arr.reduce((s,x)=>s+(x-m)**2,0)/(arr.length-1));
+}
+
+function covariance(a,b){
+  const ma=mean(a),mb=mean(b);
+  let s=0;
+  for(let i=0;i<a.length;i++)s+=(a[i]-ma)*(b[i]-mb);
+  return s/(a.length-1);
+}
+
+function annualizeDailyStd(dailyStd){return dailyStd*Math.sqrt(252);}
+
+async function analyze(){
+  const holdings=getHoldings();
+  if(holdings.length<2){
+    showStatus('err','Please enter at least 2 holdings.');
+    return;
+  }
+  saveToStorage();
+
+  const mode=document.getElementById('modeSelect').value;
+  const tickers=holdings.map(h=>h.ticker);
+  const totalValue=holdings.reduce((s,h)=>s+h.amount,0);
+  const weights=holdings.map(h=>h.amount/totalValue);
+
+  setStatus('','Analyzing portfolio risk...');
+  document.getElementById('analyzeText').innerHTML='<span class="spinner"></span> Analyzing...';
+
+  const returnsMap={};
+  const failed=[];
+
+  if(mode==='demo'){
+    tickers.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
+    showStatus('ok','Demo mode: using synthetic historical returns');
+  }else{
+    for(const t of tickers){
+      try{
+        const hist=await fetchYahooHistory(t);
+        if(hist.length<30){failed.push(`${t}: insufficient history`);continue;}
+        returnsMap[t]=calcLogReturns(hist.map(x=>x.price));
+      }catch(e){failed.push(`${t}: ${e.message}`);}
+      await new Promise(r=>setTimeout(r,400));
+    }
+    if(Object.keys(returnsMap).length<2){
+      showStatus('err',`Could not fetch enough data. Errors: ${failed.join('; ')}. Switch to Demo mode.`);
+      document.getElementById('analyzeText').textContent='Analyze Risk';
+      return;
+    }
+    if(failed.length) showStatus('warn',`Partial data: ${failed.join('; ')}`);
+    else showStatus('ok','Live data loaded from Yahoo Finance');
+  }
+
+  const n=tickers.length;
+  const minLen=Math.min(...tickers.map(t=>returnsMap[t].length));
+  const trimmed=tickers.map(t=>returnsMap[t].slice(-minLen));
+
+  const vols=tickers.map((t,i)=>annualizeDailyStd(std(trimmed[i])));
+
+  const covMatrix=Array.from({length:n},()=>Array(n).fill(0));
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++)covMatrix[i][j]=covariance(trimmed[i],trimmed[j])*252;
+
+  const portfolioVar=weights.reduce((sum,wi,i)=>sum+wi*weights.reduce((s2,wj,j)=>s2+wj*covMatrix[i][j],0),0);
+  const portfolioStd=Math.sqrt(portfolioVar);
+
+  const mctr=tickers.map((t,i)=>{
+    let sum=0;
+    for(let j=0;j<n;j++) sum+=covMatrix[i][j]*weights[j];
+    return sum/portfolioStd;
+  });
+
+  const pctContrib=tickers.map((t,i)=>weights[i]*mctr[i]/portfolioStd);
+  const dollarContrib=tickers.map((t,i)=>pctContrib[i]*totalValue);
+
+  renderTable(holdings,weights,vols,mctr,pctContrib,dollarContrib);
+  renderSummaryCards(portfolioStd,totalValue,tickers,vols,weights);
+  renderCharts(holdings,weights,vols,pctContrib,covMatrix,tickers);
+
+  document.getElementById('results').classList.remove('hidden');
+  document.getElementById('analyzeText').textContent='Analyze Risk';
+
+  currentPrices={};
+  currentReturns=returnsMap;
+}
+
+function renderTable(holdings,weights,vols,mctr,pct,dollar){
+  const tbody=document.querySelector('#riskTable tbody');
+  tbody.innerHTML='';
+  holdings.forEach((h,i)=>{
+    const row=document.createElement('tr');
+    row.innerHTML=`<td><strong>${h.ticker}</strong></td>
+      <td>${(weights[i]*100).toFixed(1)}%</td>
+      <td>${(vols[i]*100).toFixed(1)}%</td>
+      <td>${(mctr[i]*100).toFixed(2)}%</td>
+      <td class="${pct[i]>weights[i]?'negative':(pct[i]<weights[i]?'positive':'')}">${(pct[i]*100).toFixed(1)}%</td>
+      <td>$${dollar[i].toLocaleString(undefined,{maximumFractionDigits:0})}</td>`;
+    tbody.appendChild(row);
+  });
+}
+
+function renderSummaryCards(portfolioStd,totalValue,tickers,vols,weights){
+  const div=document.getElementById('summaryCards');
+
+  let html=`<div class="card"><div class="label">Portfolio Volatility</div><div class="value">${(portfolioStd*100).toFixed(1)}%</div><div class="subv">Annualized std dev</div></div>`;
+  html+=`<div class="card"><div class="label">Total Value</div><div class="value">$${(totalValue/1000).toFixed(0)}K</div><div class="subv">${tickers.length} positions</div></div>`;
+
+  const weightedDiv=weights.reduce((s,w,i)=>s+w*vols[i],0);
+  html+=`<div class="card"><div class="label">Diversification Benefit</div><div class="value">${((weightedDiv-portfolioStd)*100).toFixed(1)}%</div><div class="subv">Vol reduction from correlation</div></div>`;
+
+  div.innerHTML=html;
+}
+
+function renderCharts(holdings,weights,vols,pctContrib,covMatrix,tickers){
+  const labels=holdings.map(h=>h.ticker);
+  const colors=['#10b981','#06b6d4','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16'];
+
+  // Contribution donut
+  destroyChart('contribChart');
+  new Chart(document.getElementById('contribChart'),{
+    type:'doughnut',
+    data:{labels,datasets:[{data:pctContrib.map(x=>x*100),backgroundColor:colors.slice(0,labels.length),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#e2e8f0'}}}}
+  });
+
+  // Weight vs Risk bar
+  destroyChart('weightVsRiskChart');
+  new Chart(document.getElementById('weightVsRiskChart'),{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Weight %',data:weights.map(w=>w*100),backgroundColor:'rgba(6,182,212,0.7)',borderRadius:4},
+        {label:'Risk %',data:pctContrib.map(p=>p*100),backgroundColor:'rgba(239,68,68,0.7)',borderRadius:4}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,scales:{x:{ticks:{color:'#94a3b8'},grid:{color:'#334155'}},y:{ticks:{color:'#94a3b8'},grid:{color:'#334155'}}},plugins:{legend:{labels:{color:'#e2e8f0'}}}}
+  });
+
+  // Allocation pie
+  destroyChart('allocationChart');
+  new Chart(document.getElementById('allocationChart'),{
+    type:'pie',
+    data:{labels,datasets:[{data:weights.map(w=>w*100),backgroundColor:colors.slice(0,labels.length),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#e2e8f0'}}}}
+  });
+
+  // Correlation heatmap
+  destroyChart('corrChart');
+  new Chart(document.getElementById('corrChart'),{
+    type:'bar',
+    data:{
+      labels:tickers,
+      datasets:tickers.map((t,i)=>({
+        label:t,
+        data:tickers.map((_,j)=>{
+          const corr=covMatrix[i][j]/(vols[i]*vols[j]);
+          return corr;
+        }),
+        backgroundColor:tickers.map((_,j)=>{
+          const corr=covMatrix[i][j]/(vols[i]*vols[j]);
+          const r=Math.round(239+(16-239)*corr);
+          const g=Math.round(68+(185-68)*corr);
+          const b=Math.round(68+(129-68)*corr);
+          return `rgb(${r},${g},${b})`;
+        }),
+        borderWidth:0
+      }))
+    },
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',scales:{x:{ticks:{color:'#94a3b8'},grid:{color:'#334155'},min:-1,max:1},y:{ticks:{color:'#94a3b8'},grid:{color:'#334155'}}},plugins:{legend:{display:false}}}
+  });
+}
+
+function destroyChart(id){
+  if(chartInstances[id]){chartInstances[id].destroy();delete chartInstances[id];}
+  const el=document.getElementById(id);
+  if(el) chartInstances[id]=null;
+}
+
+// init
+loadFromStorage();
+if(!getHoldings().length) addRow();
+</script>
+</body>
+</html>
