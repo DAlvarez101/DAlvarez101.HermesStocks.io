@@ -390,15 +390,20 @@ async function autoAnalyzeWithFallback(){
   }
 
   if(Object.keys(returnsMap).length>=2){
-    if(failed.length) showStatus('warn',`Partial live data. Success: ${succeeded.join(', ')}. Failed: ${failed.join('; ')}`);
-    else showStatus('ok','Live data loaded via Yahoo Finance');
-    runAnalysis({tickers,weights,totalValue,returnsMap,mode:'live'});
+    const missing=tickers.filter(t=>!returnsMap[t]);
+    if(missing.length){
+      missing.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
+      showStatus('warn',`Live data for ${succeeded.join(', ')}; demo data for ${missing.join(', ')}.`);
+    }else{
+      showStatus('ok','Live data loaded via Yahoo Finance');
+    }
+    await runAnalysis({tickers,weights,totalValue,returnsMap,mode:'live'});
   }else{
     showStatus('err',`Live data unavailable. ${failed.join('; ')}. Auto-switching to Demo mode...`);
-    setTimeout(()=>{
+    setTimeout(async()=>{
       tickers.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
       showStatus('ok','Demo mode: using synthetic historical returns (Yahoo API blocked by browser CORS)');
-      runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
+      await runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
     },800);
   }
 }
