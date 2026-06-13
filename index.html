@@ -402,13 +402,13 @@ async function autoAnalyzeWithFallback(){
     }else{
       showStatus('ok','Live data loaded via Yahoo Finance');
     }
-    await runAnalysis({tickers,weights,totalValue,returnsMap,mode:'live'});
+    await runAnalysis({holdings,tickers,weights,totalValue,returnsMap,mode:'live'});
   }else{
     showStatus('err',`Live data unavailable. ${failed.join('; ')}. Auto-switching to Demo mode...`);
     setTimeout(async()=>{
       tickers.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
       showStatus('ok','Demo mode: using synthetic historical returns (Yahoo API blocked by browser CORS)');
-      await runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
+      await runAnalysis({holdings,tickers,weights,totalValue,returnsMap,mode:'demo'});
     },800);
   }
   }catch(e){
@@ -420,7 +420,7 @@ async function autoAnalyzeWithFallback(){
   }
 }
 
-async function runAnalysis({tickers,weights,totalValue,returnsMap,mode}){
+async function runAnalysis({holdings,tickers,weights,totalValue,returnsMap,mode}){
   try{
   const n=tickers.length;
   const minLen=Math.min(...tickers.map(t=>returnsMap[t].length));
@@ -526,7 +526,7 @@ async function analyze(){
     const returnsMap={};
     tickers.forEach(t=>{returnsMap[t]=generateDemoReturns(t)});
     showStatus('ok','Demo mode: using synthetic historical returns');
-    await runAnalysis({tickers,weights,totalValue,returnsMap,mode:'demo'});
+    await runAnalysis({holdings,tickers,weights,totalValue,returnsMap,mode:'demo'});
   }else{
     await autoAnalyzeWithFallback();
   }
@@ -623,15 +623,16 @@ function renderSummaryCards(data){
 }
 
 function renderCharts(data){
-  const {holdings,weights,vols,pctContrib,tickers}=data;
-  const labels=holdings.map(h=>h.ticker);
+  const {holdings,tickers,weights,vols,pctContrib}=data;
+  const labels=(holdings||[]).map(h=>h.ticker);
+  const chartLabels=labels.length?labels:tickers;
   const colors=['#10b981','#06b6d4','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16','#0ea5e9','#f43f5e'];
 
   // Risk contribution donut
   destroyChart('contribChart');
   chartInstances.contribChart=new Chart(document.getElementById('contribChart'),{
     type:'doughnut',
-    data:{labels,datasets:[{data:pctContrib.map(x=>x*100),backgroundColor:colors.slice(0,labels.length),borderWidth:2,borderColor:'#111827',hoverOffset:8}]},
+    data:{labels:chartLabels,datasets:[{data:pctContrib.map(x=>x*100),backgroundColor:colors.slice(0,chartLabels.length),borderWidth:2,borderColor:'#111827',hoverOffset:8}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'right',labels:{color:'#e2e8f0',font:{size:12},padding:14}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw.toFixed(1)}%`}}}}
   });
 
@@ -640,7 +641,7 @@ function renderCharts(data){
   chartInstances.weightVsRiskChart=new Chart(document.getElementById('weightVsRiskChart'),{
     type:'bar',
     data:{
-      labels,
+      labels:chartLabels,
       datasets:[
         {label:'Weight %',data:weights.map(w=>w*100),backgroundColor:'rgba(6,182,212,.7)',borderRadius:5,borderSkipped:false},
         {label:'Risk Contribution %',data:pctContrib.map(p=>p*100),backgroundColor:'rgba(239,68,68,.7)',borderRadius:5,borderSkipped:false}
@@ -653,7 +654,7 @@ function renderCharts(data){
   destroyChart('allocationChart');
   chartInstances.allocationChart=new Chart(document.getElementById('allocationChart'),{
     type:'pie',
-    data:{labels,datasets:[{data:weights.map(w=>w*100),backgroundColor:colors.slice(0,labels.length),borderWidth:2,borderColor:'#111827'}]},
+    data:{labels:chartLabels,datasets:[{data:weights.map(w=>w*100),backgroundColor:colors.slice(0,chartLabels.length),borderWidth:2,borderColor:'#111827'}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#e2e8f0',font:{size:12},padding:14}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw.toFixed(1)}%`}}}}
   });
 }
