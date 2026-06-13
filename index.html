@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Research Dashboard</title>
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --card: #111827;
+            --border: #1f2937;
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --accent: #3b82f6;
+            --accent2: #10b981;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+        }
+        header {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 { font-size: 1.25rem; font-weight: 600; }
+        header .badge {
+            background: var(--accent);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            transition: border-color 0.2s;
+        }
+        .card:hover { border-color: var(--accent); }
+        .card h2 {
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-bottom: 1rem;
+        }
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .metric:last-child { border-bottom: none; }
+        .metric .label { color: var(--muted); font-size: 0.875rem; }
+        .metric .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .positive { color: var(--accent2); }
+        .negative { color: var(--danger); }
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--muted);
+        }
+        .status::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent2);
+        }
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--muted);
+            font-size: 0.875rem;
+            border-top: 1px solid var(--border);
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>Stock Research Dashboard</h1>
+            <div class="status" style="margin-top: 0.5rem;">Live via Hermes Agent</div>
+        </div>
+        <span class="badge">v1.0</span>
+    </header>
+
+    <div class="container">
+        <div class="grid">
+            <div class="card">
+                <h2>Market Overview</h2>
+                <div class="metric">
+                    <span class="label">S&P 500</span>
+                    <span class="value">4,328.12 <span class="positive">+0.42%</span></span>
+                </div>
+                <div class="metric">
+                    <span class="label">NASDAQ</span>
+                    <span class="value">13,412.88 <span class="positive">+0.71%</span></span>
+                </div>
+                <div class="metric">
+                    <span class="label">VIX</span>
+                    <span class="value">14.22 <span class="negative">-2.15%</span></span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Watchlist</h2>
+                <div class="metric">
+                    <span class="label">AAPL</span>
+                    <span class="value">$189.52 <span class="positive">+1.20%</span></span>
+                </div>
+                <div class="metric">
+                    <span class="label">MSFT</span>
+                    <span class="value">$378.91 <span class="positive">+0.85%</span></span>
+                </div>
+                <div class="metric">
+                    <span class="label">NVDA</span>
+                    <span class="value">$485.09 <span class="negative">-1.34%</span></span>
+                </div>
+                <div class="metric">
+                    <span class="label">TSLA</span>
+                    <span class="value">$238.45 <span class="positive">+2.11%</span></span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Sector Performance</h2>
+                <div class="metric">
+                    <span class="label">Technology</span>
+                    <span class="value positive">+1.45%</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Healthcare</span>
+                    <span class="value positive">+0.62%</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Financials</span>
+                    <span class="value negative">-0.33%</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Energy</span>
+                    <span class="value negative">-1.12%</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Upcoming Earnings</h2>
+                <div class="metric">
+                    <span class="label">JPM — Mon</span>
+                    <span class="value">Pre-Market</span>
+                </div>
+                <div class="metric">
+                    <span class="label">WFC — Tue</span>
+                    <span class="value">Pre-Market</span>
+                </div>
+                <div class="metric">
+                    <span class="label">NFLX — Wed</span>
+                    <span class="value">Post-Market</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Generated by Hermes Agent · Updated 2026-06-13
+    </footer>
+</body>
+</html>
