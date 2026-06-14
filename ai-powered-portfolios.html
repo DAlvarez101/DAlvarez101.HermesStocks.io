@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI-Powered Portfolios — Research Summary</title>
+  <style>
+    :root {
+      --bg: #0b0e14; --bg2: #111827; --bg3: #1e293b; --border: #334155;
+      --text: #e2e8f0; --text2: #94a3b8; --accent: #10b981; --accent2: #06b6d4;
+      --danger: #ef4444; --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 880px; margin: 0 auto; padding: 32px 24px; }
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 6px; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .sub { color: var(--text2); font-size: 0.95rem; margin-bottom: 28px; }
+    .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 20px; }
+    .panel h2 { font-size: 1.2rem; margin-bottom: 14px; color: var(--accent2); }
+    p, li { font-size: 0.95rem; line-height: 1.7; color: var(--text2); margin-bottom: 12px; }
+    ul { margin-left: 20px; margin-bottom: 12px; }
+    li { margin-bottom: 8px; }
+    strong { color: var(--text); }
+    .highlight { background: rgba(16,185,129,.08); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 16px 0; }
+    .highlight p { color: var(--text); margin: 0; }
+    .footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); text-align: center; color: var(--text2); font-size: 0.82rem; }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .meta { font-size: 0.8rem; color: var(--text2); margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI-Powered Portfolios</h1>
+    <div class="sub">Research summary: "The Grok Portfolio" white paper + academic/market sources</div>
+    <div class="meta">Date: 2026-06-14 &middot; Data cutoff: live web search, June 2026</div>
+
+    <div class="panel">
+      <h2>Core Idea</h2>
+      <p>AI-powered portfolios place a language model or ML system at the center of investing. The AI ingests macro, fundamental, technical, and news data; scores securities (often 1–100); selects a basket; and rebalances periodically. The <strong>Grok Portfolio</strong> is a public experiment of exactly this workflow.</p>
+    </div>
+
+    <div class="panel">
+      <h2>The Grok Portfolio Mechanics</h2>
+      <ul>
+        <li><strong>Structure:</strong> 15 assets (stocks or ETFs), 1-month holding period, full month-end rebalance.</li>
+        <li><strong>Data pipeline:</strong> AI-generated macro reports + company-level financial ratios, price action, technicals, and recent news.</li>
+        <li><strong>Sources:</strong> Wikipedia, StockNewsAPI, Yahoo Finance, plus dozens of news outlets (Bloomberg, Reuters, CNBC, MarketWatch, etc.).</li>
+        <li><strong>Scoring:</strong> Structured prompt asks the model to write a short investment report and end with <code>Score: X</code>. All S&amp;P 500 firms are scored; top 30 pre-selected.</li>
+        <li><strong>Weighting:</strong> A second LLM pass assigns final weights for diversification under current conditions.</li>
+        <li><strong>Risk controls:</strong> Sector diversification, monthly rebalancing, repeatable process, multiple independent sources.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>What the Research Says</h2>
+      <ul>
+        <li><strong>Alternative data edge:</strong> ML can synthesize news sentiment, earnings calls, social data, and satellite imagery at scale.</li>
+        <li><strong>Academic results:</strong> ML-based algorithmic strategies on global indices have outperformed buy-and-hold in risk-adjusted terms; Linear SVM and Bayesian GLM performed well.</li>
+        <li><strong>Techniques:</strong> LSTMs, transformers, reinforcement learning, and gradient-boosted trees are all used for signal generation, allocation, and risk targeting.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>Risks &amp; Criticisms</h2>
+      <ul>
+        <li>Overfitting, data snooping, survivorship bias.</li>
+        <li>LLMs can hallucinate financial ratios or misread news.</li>
+        <li>Black-box decisions complicate explanation and compliance.</li>
+        <li>Rebalancing costs, slippage, and tax drag can erase paper alpha.</li>
+        <li>Correlation is not causation; models can break in regime changes.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>Key Takeaways</h2>
+      <div class="highlight">
+        <p>Data quality beats model complexity. Clean, timely, multi-source data is the real edge.</p>
+      </div>
+      <ul>
+        <li>Prompt engineering matters: structured output formats make scores actionable.</li>
+        <li>Hybrid human-AI works best: AI proposes, human sets risk budgets and constraints.</li>
+        <li>Start simple: a 15-position monthly rebalance is a tractable MVP.</li>
+        <li>Track net-of-cost performance, not just paper returns.</li>
+        <li>Keep an audit trail of every prompt, score, source, and rationale.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>Possible Next Experiments</h2>
+      <ul>
+        <li>Replicate Grok scoring on a smaller universe (e.g., S&amp;P 100 or custom watchlist).</li>
+        <li>Compare LLM scores vs. a simple momentum + value screen.</li>
+        <li>Add a risk overlay: max sector weight, volatility target, max drawdown rule.</li>
+        <li>Build an HTML scorecard showing each position's AI score, rationale, and source links.</li>
+        <li>Use Hermes <code>delegate_task</code> to run parallel sector analysts + synthesizer.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>Disclaimer</h2>
+      <p>These notes are for research and educational purposes only. They are <strong>not investment advice</strong>. Any live strategy requires independent due diligence, backtesting, and risk controls.</p>
+    </div>
+
+    <div class="footer">
+      Built with Hermes multi-agent orchestration &middot;
+      <a href="https://github.com/DAlvarez101/DAlvarez101.HermesStocks.io">Source</a> &middot;
+      <a href="/">Back to Dashboard</a>
+    </div>
+  </div>
+</body>
+</html>
