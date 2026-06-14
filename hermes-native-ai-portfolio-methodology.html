@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermes-Native AI Portfolio Methodology</title>
+  <style>
+    :root {
+      --bg: #0b0e14; --bg2: #111827; --bg3: #1e293b; --border: #334155;
+      --text: #e2e8f0; --text2: #94a3b8; --accent: #10b981; --accent2: #06b6d4;
+      --danger: #ef4444; --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 6px; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .sub { color: var(--text2); font-size: 0.95rem; margin-bottom: 28px; }
+    .status { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25); color: #fcd34d; padding: 12px 16px; border-radius: 10px; margin-bottom: 24px; font-size: 0.88rem; }
+    .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 20px; }
+    .panel h2 { font-size: 1.2rem; margin-bottom: 12px; color: var(--accent2); }
+    .panel p, .panel li { font-size: 0.95rem; line-height: 1.7; color: var(--text2); margin-bottom: 10px; }
+    .panel ul { margin-left: 20px; margin-bottom: 10px; }
+    .panel li { margin-bottom: 6px; }
+    .panel strong { color: var(--text); }
+    .panel code { background: var(--bg3); padding: 2px 6px; border-radius: 5px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85em; }
+    .footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); text-align: center; color: var(--text2); font-size: 0.82rem; }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Hermes-Native AI Portfolio Methodology</h1>
+    <div class="sub">Design outline for building a robust, multi-agent AI-powered portfolio system inside Hermes.</div>
+    <div class="status">
+      ⚠ Status: DESIGN PHASE — methodology outline only; not yet implemented.
+    </div>
+
+
+    <div class="panel">
+      <h2>1. Design philosophy</h2>
+      <p>Build a multi-agent portfolio system where each agent has a narrow, well-defined role, and orchestration enforces dependencies, quality gates, and auditability.</p>
+    </div>
+
+    <div class="panel">
+      <h2>2. System architecture overview</h2>
+      <p>A layered architecture: Human Operator → Orchestrator/Conductor → Specialist Analysts (macro, fundamental, technical/news) → Score Synthesizer → Portfolio Builder → Reviewer/Auditor. Each layer feeds the next via deterministic files in <code>/opt/data/stock-research/data/processed/YYYY-MM-DD/</code>.</p>
+    </div>
+
+    <div class="panel">
+      <h2>3. Hermes profiles to create</h2>
+      <p>Create purpose-built profiles instead of overloading default:<ul><li><strong>portfolio-orchestrator</strong> — plans rebalance and dispatches work.</li><li><strong>macro-analyst</strong> — economic context and regime assessment.</li><li><strong>fundamental-analyst</strong> — ratios, valuation, quality.</li><li><strong>technical-analyst</strong> — momentum, sentiment, news.</li><li><strong>scoring-synthesizer</strong> — combines signals into unified ranks.</li><li><strong>portfolio-builder</strong> — applies constraints and risk overlays.</li><li><strong>portfolio-reviewer</strong> — final quality gate and sanity checks.</li><li><strong>execution-clerk</strong> — trade sheets and logs (only after paper-trading approval).</li></ul></p>
+    </div>
+
+    <div class="panel">
+      <h2>4. Robust data pipeline</h2>
+      <p>Cache all raw data under dated folders. A <strong>data-validator</strong> subagent checks non-empty files, valid tickers, and cross-source consistency before scoring runs. If validation fails, the orchestrator blocks the task rather than proceeding with garbage data.</p>
+    </div>
+
+    <div class="panel">
+      <h2>5. Scoring workflow</h2>
+      <p>Use structured prompt templates saved as Hermes skills. Every analyst outputs JSON with <code>score</code>, <code>confidence</code>, <code>thesis</code>, <code>bull_case</code>, <code>bear_case</code>, <code>key_risks</code>, and <code>data_cutoff</code>. Run macro, fundamental, and technical scores in parallel via <code>delegate_task</code> or Kanban workers; the synthesizer reconciles divergences and produces a final rank.</p>
+    </div>
+
+    <div class="panel">
+      <h2>6. Portfolio construction</h2>
+      <p>The portfolio-builder selects the top N assets and applies constraints (max position, sector caps, min/max holdings) plus risk overlays (volatility targeting, correlation limits, drawdown guards). Weight math is done in Python via <code>execute_code</code>, not by the LLM, to guarantee accuracy. Output is <code>recommendation.json</code> plus a trade-sheet CSV.</p>
+    </div>
+
+    <div class="panel">
+      <h2>7. Quality gates</h2>
+      <p>The reviewer runs a checklist: explicit data cutoff, cited sources or 'unknown' markers, constraint satisfaction, documented bear case, weights sum to 100%, no duplicates/delisted symbols, month-over-month change explanation, and risk disclaimer. Any failure triggers a <code>kanban_block</code> with specific reason.</p>
+    </div>
+
+    <div class="panel">
+      <h2>8. Durable execution via Kanban</h2>
+      <p>Convert monthly rebalance into a Kanban board with parent-linked tasks so it survives crashes. Use <code>parents=[...]</code> to enforce dependency order and <code>goal_mode=True</code> for long-running data-fetch tasks. The dispatcher auto-spawns the next stage only after predecessors complete.</p>
+    </div>
+
+    <div class="panel">
+      <h2>9. Scheduling</h2>
+      <p>Use <code>hermes cron</code> (e.g., <code>0 9 1 * *</code>) to trigger rebalances. Deliver completion notifications to the gateway home channel. Provide a manual override Kanban card for emergency rebalances.</p>
+    </div>
+
+    <div class="panel">
+      <h2>10. Memory and auditability</h2>
+      <p>Store user preferences, lessons learned, and prompt versions in Hermes memory. Maintain a file-system audit trail per rebalance: <code>inputs.json</code>, raw data, <code>scores.json</code>, <code>recommendation.json</code>, <code>rationale.md</code>, <code>trade-sheet.csv</code>, and <code>reviewer-signoff.md</code>.</p>
+    </div>
+
+    <div class="panel">
+      <h2>11. Robustness patterns</h2>
+      <p>Agent-level: always <code>kanban_show</code> first, never invent data, use <code>goal_mode</code>, set timeouts, limit delegation depth. Pipeline-level: redundant data sources, deterministic paths, JSON schema validation, idempotent stages. Human-level: approval gates, gateway notifications, reviewer blocks on terminal actions.</p>
+    </div>
+
+    <div class="panel">
+      <h2>12. Backtesting and paper-trading</h2>
+      <p>Before live capital, run a backtest track replaying historical dates and a paper-trade track producing trade sheets without execution. Only connect the execution-clerk to a broker API after acceptable Sharpe, drawdown, and turnover metrics.</p>
+    </div>
+
+    <div class="panel">
+      <h2>13. Implementation phases</h2>
+      <p>Phase 1: single asset/single signal. Phase 2: multi-asset parallel scoring. Phase 3: durable Kanban rebalance with reviewer. Phase 4: cron + notifications + HTML reports. Phase 5: paper trading. Phase 6: optional live execution.</p>
+    </div>
+
+
+    <div class="panel">
+      <h2>16. Disclaimer</h2>
+      <p>This is a research and educational design outline. It is <strong>not investment advice</strong>. Any live implementation requires legal, compliance, and risk review, plus thorough backtesting and paper trading.</p>
+    </div>
+
+    <div class="footer">
+      Built with Hermes multi-agent orchestration &middot;
+      <a href="https://github.com/DAlvarez101/DAlvarez101.HermesStocks.io">Source</a> &middot;
+      <a href="/">Back to Dashboard</a>
+    </div>
+  </div>
+</body>
+</html>
