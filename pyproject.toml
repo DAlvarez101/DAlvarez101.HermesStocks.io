@@ -15,3 +15,7 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "network: tests that require network access",
+    "slow: tests that take a long time to run",
+]
