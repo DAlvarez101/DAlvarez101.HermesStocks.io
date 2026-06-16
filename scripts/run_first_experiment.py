@@ -29,7 +29,7 @@ from dfw_temp_model.data.iem_asos import fetch_all_stations as fetch_asos
 from dfw_temp_model.data.openmeteo import fetch_all_stations as fetch_openmeteo
 from dfw_temp_model.evaluation.metrics import evaluate_correction, mae, rmse
 from dfw_temp_model.features.geometry import station_geometry_table
-from dfw_temp_model.models.advection import advection_predict
+from dfw_temp_model.models.advection import advection_predict, advection_predict_with_fronts
 from dfw_temp_model.models.baseline import inverse_distance_predict
 from dfw_temp_model.training.splits import time_based_split
 
@@ -94,6 +94,29 @@ def parse_args() -> argparse.Namespace:
         "--output-stem",
         default="2024_holdout",
         help="Stem used for CSV and JSON result files.",
+    )
+    parser.add_argument(
+        "--use-fronts",
+        action="store_true",
+        help="Enable front-detection fallback branch in the advection model.",
+    )
+    parser.add_argument(
+        "--gradient-threshold",
+        type=float,
+        default=0.05,
+        help="Residual gradient threshold (°F/km) for front detection.",
+    )
+    parser.add_argument(
+        "--front-fallback",
+        default="mean",
+        choices=["mean", "idw"],
+        help="Fallback predictor used on flagged front days.",
+    )
+    parser.add_argument(
+        "--front-uncertainty-mult",
+        type=float,
+        default=2.0,
+        help="Uncertainty multiplier recorded for front-day predictions.",
     )
     return parser.parse_args()
 
@@ -205,16 +228,36 @@ def main() -> None:
     wind_df = get_daily_wind(obs_df, station=args.wind_station)
     wind_df = wind_df.loc[wind_df.index.intersection(val.index)]
 
-    advection_pred = advection_predict(
-        residuals_full.loc[val.index],
-        geom,
-        wind_df,
-        target_col=TARGET_ICAO,
-        p=args.p_advection,
-        boost=args.boost,
-        half_width=args.half_width,
-        l_adv_km=args.l_adv_km,
-    )
+    if args.use_fronts:
+        advection_pred = advection_predict_with_fronts(
+            residuals_full.loc[val.index],
+            geom,
+            wind_df,
+            target_col=TARGET_ICAO,
+            p=args.p_advection,
+            boost=args.boost,
+            half_width=args.half_width,
+            l_adv_km=args.l_adv_km,
+            front_params={
+                "gradient_threshold": args.gradient_threshold,
+                "front_fallback": args.front_fallback,
+                "uncertainty_multiplier": args.front_uncertainty_mult,
+            },
+        )
+        front_day_count = int(advection_pred["front_day"].sum())
+        print(f"\nFront days detected: {front_day_count} / {len(val)}")
+    else:
+        advection_pred = advection_predict(
+            residuals_full.loc[val.index],
+            geom,
+            wind_df,
+            target_col=TARGET_ICAO,
+            p=args.p_advection,
+            boost=args.boost,
+            half_width=args.half_width,
+            l_adv_km=args.l_adv_km,
+        )
+        front_day_count = None
 
     # Pull observed high, raw forecast, and corrected forecasts for val dates.
     val_obs = target_table.loc[val.index, "kdfw_obs"]
@@ -257,6 +300,11 @@ def main() -> None:
             "advection_error": (val_obs - advection_corrected).values,
         }
     )
+    if args.use_fronts:
+        comparison["front_day"] = advection_pred["front_day"].values
+        comparison["front_uncertainty_multiplier"] = advection_pred[
+            "front_uncertainty_multiplier"
+        ].values
     csv_path = RESULTS_PATH / f"{args.output_stem}_comparison.csv"
     comparison.to_csv(csv_path, index=False)
     print(f"\nSaved comparison CSV: {csv_path}")
@@ -284,6 +332,11 @@ def main() -> None:
             "half_width": args.half_width,
             "l_adv_km": args.l_adv_km,
             "wind_station": args.wind_station,
+            "use_fronts": args.use_fronts,
+            "gradient_threshold": args.gradient_threshold if args.use_fronts else None,
+            "front_fallback": args.front_fallback if args.use_fronts else None,
+            "front_uncertainty_mult": args.front_uncertainty_mult if args.use_fronts else None,
+            "front_day_count": front_day_count,
         },
     }
     json_path = RESULTS_PATH / f"{args.output_stem}_metrics.json"
