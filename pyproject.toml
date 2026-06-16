@@ -19,3 +19,7 @@ markers = [
     "network: tests that require network access",
     "slow: tests that take a long time to run",
 ]
+
+[tool.setuptools.packages.find]
+include = ["dfw_temp_model*"]
+exclude = ["data*", "notebooks*", "scripts*", "tests*"]
