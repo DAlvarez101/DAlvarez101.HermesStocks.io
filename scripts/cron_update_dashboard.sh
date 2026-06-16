@@ -1,10 +1,9 @@
 #!/bin/bash
-"""Run hourly ingestion, regenerate dashboard, and push to GitHub Pages.
-
-This script is called by the Hermes cronjob. It is written as a bash wrapper
-because the cron scheduler runs shell commands more reliably than multi-line
-Python invocations, and it lets us export the Docker-root variables once.
-"""
+# Run hourly ingestion, regenerate dashboard, and push to GitHub Pages.
+#
+# This script is called by the Hermes cronjob. It is written as a bash wrapper
+# because the cron scheduler runs shell commands more reliably than multi-line
+# Python invocations, and it lets us export the Docker-root variables once.
 set -euo pipefail
 
 export HERMES_HOME=/opt/data
