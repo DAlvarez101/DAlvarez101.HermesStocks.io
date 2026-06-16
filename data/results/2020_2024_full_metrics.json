@@ -1,0 +1,37 @@
+{
+  "date_range": {
+    "start": "2020-01-01",
+    "end": "2024-12-31"
+  },
+  "split": {
+    "train_days": 1461,
+    "val_days": 365,
+    "test_days": 0
+  },
+  "baseline": {
+    "raw_rmse": 2.749106953375203,
+    "raw_mae": 2.1852054794520543,
+    "corrected_rmse": 1.3547843023970514,
+    "corrected_mae": 1.0198147157041888,
+    "rmse_improvement": 0.5071911259277412,
+    "bucket_hit_rate": 0.3159340659340659,
+    "residual_rmse": 1.354784302397051
+  },
+  "advection": {
+    "raw_rmse": 2.749106953375203,
+    "raw_mae": 2.1852054794520543,
+    "corrected_rmse": 1.3488824634461767,
+    "corrected_mae": 1.016826262237189,
+    "rmse_improvement": 0.5093379463501437,
+    "bucket_hit_rate": 0.32602739726027397,
+    "residual_rmse": 1.3488824634461767
+  },
+  "parameters": {
+    "p_baseline": 2.0,
+    "p_advection": 2.0,
+    "boost": 3.0,
+    "half_width": 45.0,
+    "l_adv_km": 50.0,
+    "wind_station": "KDFW"
+  }
+}

@@ -19,6 +19,7 @@ from pathlib import Path
 import pandas as pd
 
 from dfw_temp_model.config import CACHE_DIR, STATIONS, TARGET_ICAO
+from dfw_temp_model.data.aviationweather import fetch_aviationweather
 from dfw_temp_model.data.build_dataset import (
     build_residual_table,
     build_target_table,
@@ -118,18 +119,47 @@ def parse_args() -> argparse.Namespace:
         default=2.0,
         help="Uncertainty multiplier recorded for front-day predictions.",
     )
+    parser.add_argument(
+        "--obs-source",
+        default="iem",
+        choices=["iem", "aviationweather"],
+        help="Observation source. Use 'aviationweather' for recent live METARs (last ~24 hours).",
+    )
+    parser.add_argument(
+        "--aviationweather-hours",
+        type=int,
+        default=2,
+        help="Hours back to request from AviationWeather.gov when --obs-source=aviationweather.",
+    )
     return parser.parse_args()
 
 
-def load_or_fetch_asos(start: str, end: str, force_refresh: bool = False) -> pd.DataFrame:
+def _date_to_iso(date_str: str) -> str:
+    return pd.Timestamp(date_str).strftime("%Y-%m-%d")
+
+
+def load_or_fetch_asos(
+    start: str,
+    end: str,
+    force_refresh: bool = False,
+    source: str = "iem",
+    avwx_hours: int = 2,
+) -> pd.DataFrame:
     """Load ASOS obs from cache if present, otherwise fetch and cache."""
     cache_file = CACHE_PATH / f"asos_{start}_{end}.parquet"
     if not force_refresh and cache_file.exists():
         print(f"Loading ASOS obs from cache: {cache_file}")
         return pd.read_parquet(cache_file)
 
-    print(f"Fetching ASOS obs for {start} to {end} ...")
     CACHE_PATH.mkdir(parents=True, exist_ok=True)
+
+    if source == "aviationweather":
+        print(f"Fetching live METARs from AviationWeather.gov ({avwx_hours} hours back) ...")
+        df = fetch_aviationweather(STATIONS, hours=avwx_hours, cache_path=str(cache_file))
+        print(f"Live METARs cached: {cache_file} ({len(df)} rows)")
+        return df
+
+    print(f"Fetching ASOS obs for {start} to {end} ...")
     df = fetch_asos(start, end, STATIONS, cache_path=str(cache_file))
     print(f"ASOS obs cached: {cache_file} ({len(df)} rows)")
     return df
@@ -192,8 +222,35 @@ def main() -> None:
     end_date = args.end_date
 
     # Fetch / load data.
-    obs_df = load_or_fetch_asos(start_date, end_date, force_refresh=args.force_refresh)
+    obs_df = load_or_fetch_asos(
+        start_date,
+        end_date,
+        force_refresh=args.force_refresh,
+        source=args.obs_source,
+        avwx_hours=args.aviationweather_hours,
+    )
     fcst_df = load_or_fetch_openmeteo(start_date, end_date, force_refresh=args.force_refresh)
+
+    # Live METAR source does not provide historical daily highs; bail out early
+    # with a friendly message and the latest observations.
+    if args.obs_source == "aviationweather":
+        latest = (
+            obs_df.sort_values("valid")
+            .groupby("station")
+            .last()
+            .reset_index()
+            .sort_values("station")
+        )
+        print("\nLive METAR summary (AviationWeather.gov):")
+        print(
+            latest[["station", "valid", "tmpf", "dewpf", "drct", "sknt", "skyc1"]]
+            .to_string(index=False)
+        )
+        print(
+            "\nNote: AviationWeather.gov only provides recent live METARs. "
+            "Historical daily-high experiments require --obs-source=iem."
+        )
+        return
 
     # Build daily highs and residual/target tables.
     obs_daily = compute_daily_highs(obs_df)
