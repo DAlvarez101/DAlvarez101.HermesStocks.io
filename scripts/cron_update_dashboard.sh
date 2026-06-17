@@ -20,9 +20,6 @@ cd "$PROJECT_DIR"
 # Use project venv explicitly.
 PYTHON="${PROJECT_DIR}/.venv/bin/python"
 
-# Ensure the project package is importable when running scripts directly.
-export PYTHONPATH="${PROJECT_DIR}${PYTHONPATH:+:$PYTHONPATH}"
-
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Ingesting live METARs + HRRR forecast ..."
 "$PYTHON" scripts/ingest_live_metars.py --db "$DB_PATH" --hours "$HOURS_BACK" --hrrr
 
