@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parallel Stock Screener Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --border: #334155;
+      --positive: #22c55e;
+      --warn: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin: 0 0 0.5rem;
+      color: var(--accent);
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    h2 {
+      margin: 0 0 1rem;
+      font-size: 1.35rem;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+
+    .screen-desc {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 0.75rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      color: var(--accent);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .rank {
+      font-weight: 700;
+      color: var(--accent);
+      width: 3rem;
+    }
+
+    .ticker {
+      font-weight: 700;
+      font-size: 1rem;
+      width: 4.5rem;
+    }
+
+    .metric {
+      white-space: nowrap;
+      color: var(--positive);
+      font-weight: 500;
+    }
+
+    .rationale {
+      color: var(--muted);
+      max-width: 360px;
+    }
+
+    .top-picks {
+      background: linear-gradient(135deg, #1e293b 0%, #172554 100%);
+      border: 1px solid #3b82f6;
+    }
+
+    .top-picks h2 {
+      color: #60a5fa;
+      border-bottom-color: #3b82f6;
+    }
+
+    .pick-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .pick-card:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .pick-rank {
+      flex-shrink: 0;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: #3b82f6;
+      color: white;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+
+    .pick-body h3 {
+      margin: 0 0 0.25rem;
+      font-size: 1.15rem;
+      color: var(--text);
+    }
+
+    .pick-body .source {
+      font-size: 0.8rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 0.35rem;
+      display: block;
+    }
+
+    .pick-body p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Parallel Stock Screener Dashboard</h1>
+      <p class="subtitle">Synthesized from three parallel subagents &middot; Data as of June 12–13, 2026</p>
+    </header>
+
+    <section>
+      <h2>1. Value Tech</h2>
+      <p class="screen-desc">5 large-cap tech stocks with low P/E and strong FCF yield.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th>Key Metric</th>
+            <th>Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rank">1</td>
+            <td class="ticker">QCOM</td>
+            <td>Qualcomm Inc.</td>
+            <td class="metric">P/E 22.2 &middot; FCF yield 5.50%</td>
+            <td class="rationale">Dominant mobile-chip licensing model generates high-margin cash at a modest valuation, with AI/IoT tailwinds expanding its addressable market.</td>
+          </tr>
+          <tr>
+            <td class="rank">2</td>
+            <td class="ticker">META</td>
+            <td>Meta Platforms Inc.</td>
+            <td class="metric">P/E 20.6 &middot; FCF yield 3.37%</td>
+            <td class="rationale">Advertising rebound plus cost discipline is converting revenue into strong free cash flow at the lowest P/E among mega-cap tech peers.</td>
+          </tr>
+          <tr>
+            <td class="rank">3</td>
+            <td class="ticker">MSFT</td>
+            <td>Microsoft Corp.</td>
+            <td class="metric">P/E 23.3 &middot; FCF yield 2.53%</td>
+            <td class="rationale">Azure and Office annuity produce durable cash flow, though heavy AI capex has compressed FCF yield relative to its still-attractive earnings multiple.</td>
+          </tr>
+          <tr>
+            <td class="rank">4</td>
+            <td class="ticker">AAPL</td>
+            <td>Apple Inc.</td>
+            <td class="metric">P/E 35.8 &middot; FCF yield 3.07%</td>
+            <td class="rationale">Services mix and capital-light hardware after-sales sustain massive absolute FCF, but the stock trades at a clear premium P/E.</td>
+          </tr>
+          <tr>
+            <td class="rank">5</td>
+            <td class="ticker">GOOGL</td>
+            <td>Alphabet Inc.</td>
+            <td class="metric">P/E 27.4 &middot; FCF yield 1.47%</td>
+            <td class="rationale">Search and Cloud remain cash-rich, yet surging AI infrastructure spending has pulled FCF yield well below comparable mega-cap tech names.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>2. Growth SaaS</h2>
+      <p class="screen-desc">5 SaaS stocks with high revenue growth and high gross margin.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th>Key Metric</th>
+            <th>Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rank">1</td>
+            <td class="ticker">DDOG</td>
+            <td>Datadog, Inc.</td>
+            <td class="metric">Rev growth 28% &middot; Gross margin 80%</td>
+            <td class="rationale">Leading cloud observability/security platform with durable high-20s revenue growth and ~80% gross margins, driven by multi-product adoption and AI workloads.</td>
+          </tr>
+          <tr>
+            <td class="rank">2</td>
+            <td class="ticker">NET</td>
+            <td>Cloudflare, Inc.</td>
+            <td class="metric">Rev growth 39% &middot; Gross margin 73%</td>
+            <td class="rationale">Connectivity cloud leader reaccelerating to high-30s revenue growth with 73%+ gross margins, benefiting from AI/Workers and large enterprise deal momentum.</td>
+          </tr>
+          <tr>
+            <td class="rank">3</td>
+            <td class="ticker">MNDY</td>
+            <td>monday.com Ltd.</td>
+            <td class="metric">Rev growth 27% &middot; Gross margin 89%</td>
+            <td class="rationale">Work OS/CRM platform delivering 27% revenue growth with best-in-class ~89% gross margin, strong enterprise upmarket traction and AI product adoption.</td>
+          </tr>
+          <tr>
+            <td class="rank">4</td>
+            <td class="ticker">CRWD</td>
+            <td>CrowdStrike Holdings, Inc.</td>
+            <td class="metric">Rev growth ~24% &middot; Gross margin 75%</td>
+            <td class="rationale">AI-native cybersecurity leader with ~24% revenue growth and ~75% GAAP gross margin, supported by expanding Falcon module adoption.</td>
+          </tr>
+          <tr>
+            <td class="rank">5</td>
+            <td class="ticker">ZS</td>
+            <td>Zscaler, Inc.</td>
+            <td class="metric">Rev growth ~24% &middot; Gross margin 80%</td>
+            <td class="rationale">Zero-trust cloud security leader growing revenue/ARR ~23–26% YoY with ~80% gross margin and improving free cash flow generation.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>3. Dividend Aristocrats</h2>
+      <p class="screen-desc">5 stocks with yield &gt;3% and payout ratio &lt;60%.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th>Key Metric</th>
+            <th>Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="rank">1</td>
+            <td class="ticker">TGT</td>
+            <td>Target Corporation</td>
+            <td class="metric">Yield 3.37% &middot; Payout 50.2%</td>
+            <td class="rationale">58+ consecutive years of dividend increases with a moderate payout ratio and an above-average entry yield as the retail turnaround progresses.</td>
+          </tr>
+          <tr>
+            <td class="rank">2</td>
+            <td class="ticker">TROW</td>
+            <td>T. Rowe Price Group</td>
+            <td class="metric">Yield 4.74% &middot; Payout 54.8%</td>
+            <td class="rationale">38+ years of dividend growth, high yield for an asset manager, and payout comfortably below 60% despite fee-pressure headwinds.</td>
+          </tr>
+          <tr>
+            <td class="rank">3</td>
+            <td class="ticker">ED</td>
+            <td>Consolidated Edison</td>
+            <td class="metric">Yield 3.21% &middot; Payout 58.7%</td>
+            <td class="rationale">50+ years of dividend increases; regulated-utility cash flows support a stable, sustainable payout near the 60% threshold.</td>
+          </tr>
+          <tr>
+            <td class="rank">4</td>
+            <td class="ticker">MKC</td>
+            <td>McCormick &amp; Company</td>
+            <td class="metric">Yield 3.90% &middot; Payout 30.5%</td>
+            <td class="rationale">40+ years of dividend growth with a very low payout ratio, though the pending Unilever food-brands deal adds integration uncertainty.</td>
+          </tr>
+          <tr>
+            <td class="rank">5</td>
+            <td class="ticker">CVX</td>
+            <td>Chevron Corporation</td>
+            <td class="metric">Yield 3.78% &middot; Payout ~55%</td>
+            <td class="rationale">38-year dividend-growth streak; forward payout is estimated near 55% at normalized oil prices despite elevated trailing TTM payout.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="top-picks">
+      <h2>Top Picks</h2>
+      <p class="screen-desc">3 best-ranked tickers overall across all three screens.</p>
+
+      <div class="pick-card">
+        <div class="pick-rank">1</div>
+        <div class="pick-body">
+          <h3>QCOM <span style="font-weight:400;color:var(--muted);">— Qualcomm Inc.</span></h3>
+          <span class="source">Value Tech Winner</span>
+          <p>Ranks first in value tech by pairing the lowest P/E in the cohort (22.2) with the highest FCF yield (5.50%). Its mobile-chip licensing franchise throws off high-margin cash, and AI/IoT growth offers optionality without a stretched valuation.</p>
+        </div>
+      </div>
+
+      <div class="pick-card">
+        <div class="pick-rank">2</div>
+        <div class="pick-body">
+          <h3>DDOG <span style="font-weight:400;color:var(--muted);">— Datadog, Inc.</span></h3>
+          <span class="source">Growth SaaS Winner</span>
+          <p>Leads the SaaS screen with the best balance of durable ~28% revenue growth and an ~80% gross margin. The observability/security platform benefits from AI workload observability and broad multi-product adoption.</p>
+        </div>
+      </div>
+
+      <div class="pick-card">
+        <div class="pick-rank">3</div>
+        <div class="pick-body">
+          <h3>TGT <span style="font-weight:400;color:var(--muted);">— Target Corporation</span></h3>
+          <span class="source">Dividend Aristocrat Winner</span>
+          <p>Tops the dividend screen with a 3.37% yield and the safest payout ratio (50.2%) among the five, backed by 58+ consecutive years of dividend increases and a retail turnaround still in progress.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Generated by parallel stock-screener subagents via delegate_task. Not financial advice. Verify all data before investing.
+    </footer>
+  </div>
+</body>
+</html>

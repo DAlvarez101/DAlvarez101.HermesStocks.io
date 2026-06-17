@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermes Stocks — Dashboard of Dashboards</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --bg2: #111827;
+      --bg3: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --accent: #10b981;
+      --accent2: #06b6d4;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .sub { color: var(--text2); font-size: 0.95rem; margin-bottom: 28px; }
+    .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 20px; transition: box-shadow .3s; }
+    .panel:hover { box-shadow: 0 8px 32px rgba(0,0,0,.25); }
+    .panel h2 { font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .card { display: block; background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 18px; text-decoration: none; color: var(--text); transition: transform .15s, border-color .2s; }
+    .card:hover { transform: translateY(-3px); border-color: var(--accent2); }
+    .card h3 { font-size: 1.05rem; margin-bottom: 8px; color: var(--accent2); }
+    .card p { font-size: 0.88rem; color: var(--text2); line-height: 1.5; }
+    .card .meta { margin-top: 12px; font-size: 0.78rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; }
+    .empty { color: var(--text2); font-size: 0.9rem; padding: 12px 0; }
+    .footer { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); text-align: center; color: var(--text2); font-size: 0.82rem; }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .tag { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; margin-left: 8px; }
+    .tag.new { background: rgba(16,185,129,.15); color: #6ee7b7; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Hermes Stocks</h1>
+    <div class="sub">Dashboard of dashboards — browse all generated reports and tools below.</div>
+
+    <div class="panel">
+      <h2>📊 Available Pages</h2>
+      <div id="pageGrid" class="grid"><div class="empty">Scanning repository...</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>🛠️ Tools</h2>
+      <div class="grid">
+        <a class="card" href="portfolio-risk-analyzer.html">
+          <h3>Portfolio Risk Analyzer</h3>
+          <p>Enter holdings, calculate VaR/CVaR, MCTR, correlation heatmap, and stress scenarios.</p>
+          <div class="meta">Interactive Tool</div>
+        </a>
+      </div>
+    </div>
+
+    <div class="footer">
+      Built with Hermes multi-agent orchestration &middot;
+      <a href="https://github.com/DAlvarez101/DAlvarez101.HermesStocks.io">Source</a>
+    </div>
+  </div>
+
+  <script>
+    // Pages to always show, even if fetch fails or repo changes
+    const knownPages = [
+      { file: 'index.html', title: 'Dashboard Home', desc: 'This page — overview of all reports and tools.' },
+      { file: 'portfolio-risk-analyzer.html', title: 'Portfolio Risk Analyzer', desc: 'Interactive portfolio risk analysis with VaR, MCTR, correlations, and stress tests.' },
+      { file: 'delegate-task-demo.html', title: 'Parallel Stock Screener Demo', desc: 'Results from 3 parallel delegate_task subagents: value tech, growth SaaS, dividend aristocrats.' }
+    ];
+
+    async function loadPages() {
+      const grid = document.getElementById('pageGrid');
+      try {
+        const res = await fetch('https://api.github.com/repos/DAlvarez101/DAlvarez101.HermesStocks.io/contents/?ref=main');
+        if (!res.ok) throw new Error('GitHub API ' + res.status);
+        const items = await res.json();
+        const htmlFiles = items
+          .filter(it => it.type === 'file' && it.name.endsWith('.html') && it.name !== 'index.html')
+          .map(it => {
+            const known = knownPages.find(p => p.file === it.name);
+            return {
+              file: it.name,
+              title: known ? known.title : it.name.replace(/-/g, ' ').replace(/\.html$/, '').replace(/\b\w/g, c => c.toUpperCase()),
+              desc: known ? known.desc : 'Generated report page.',
+              updated: new Date(it.commit?.date || it.sha).toLocaleDateString()
+            };
+          })
+          .sort((a, b) => a.title.localeCompare(b.title));
+
+        if (htmlFiles.length === 0) {
+          grid.innerHTML = '<div class="empty">No report pages found yet.</div>';
+          return;
+        }
+
+        grid.innerHTML = htmlFiles.map(p => `
+          <a class="card" href="${p.file}">
+            <h3>${p.title}${p.file === 'delegate-task-demo.html' ? '<span class="tag new">Latest</span>' : ''}</h3>
+            <p>${p.desc}</p>
+            <div class="meta">Updated: ${p.updated}</div>
+          </a>
+        `).join('');
+      } catch (e) {
+        // Fallback to known pages if GitHub API fails (CORS, rate limit, etc.)
+        grid.innerHTML = knownPages
+          .filter(p => p.file !== 'index.html')
+          .map(p => `
+            <a class="card" href="${p.file}">
+              <h3>${p.title}${p.file === 'delegate-task-demo.html' ? '<span class="tag new">Latest</span>' : ''}</h3>
+              <p>${p.desc}</p>
+              <div class="meta">Static listing</div>
+            </a>
+          `).join('');
+      }
+    }
+
+    loadPages();
+  </script>
+</body>
+</html>
