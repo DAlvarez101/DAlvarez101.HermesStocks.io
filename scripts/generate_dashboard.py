@@ -9,6 +9,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.graph_objects as go
+import plotly.offline as pyo
 
 from dfw_temp_model.config import CACHE_DIR, TARGET_ICAO
 from dfw_temp_model.storage.obs_db import (
@@ -77,7 +79,7 @@ HTML_TEMPLATE = """
     </div>
 
     <h2>HRRR 18-hour forecast ({TARGET_ICAO})</h2>
-    <img src="data:image/png;base64,{hrrr_chart}" alt="HRRR 18-hour forecast for {TARGET_ICAO}">
+    {hrrr_chart}
 
     <h2>Latest readings per station</h2>
     {latest_table}
@@ -174,26 +176,60 @@ def hourly_count_chart(conn) -> str:
 
 
 def hrrr_forecast_chart(conn) -> str:
-    """18-hour HRRR 2 m temperature forecast chart for the target station."""
+    """Interactive Plotly HRRR 2 m temperature forecast chart for the target station."""
     df = hrrr_forecast_range(conn, station=TARGET_ICAO, limit=18)
-    fig, ax = plt.subplots(figsize=(10, 4), facecolor="#0f172a")
-    ax.set_facecolor("#0f172a")
     if df.empty:
-        ax.text(0.5, 0.5, "No HRRR forecast data yet", ha="center", va="center", color="#e2e8f0")
-        return _to_base64(fig)
+        return "<p>No HRRR forecast data yet</p>"
+
     df["valid_dt"] = pd.to_datetime(df["valid_dt"], utc=True)
+    df["init_dt"] = pd.to_datetime(df["init_dt"], utc=True)
     df = df.sort_values("valid_dt")
-    ax.plot(df["valid_dt"], df["tmpf"], color="#f59e0b", linewidth=2, marker="o", markersize=4)
-    ax.fill_between(df["valid_dt"], df["tmpf"], alpha=0.15, color="#f59e0b")
-    ax.set_title(f"HRRR 18-hour forecast — {TARGET_ICAO} 2 m temp", color="#e2e8f0")
-    ax.set_ylabel("Temperature (°F)", color="#e2e8f0")
-    ax.set_xlabel("Valid time (UTC)", color="#e2e8f0")
-    ax.tick_params(axis="x", rotation=45, colors="#e2e8f0")
-    ax.tick_params(axis="y", colors="#e2e8f0")
-    ax.grid(True, alpha=0.3, color="#334155")
-    for spine in ax.spines.values():
-        spine.set_color("#334155")
-    return _to_base64(fig)
+    init_label = df["init_dt"].iloc[0].strftime("%Y-%m-%d %H:%M UTC")
+
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=df["valid_dt"],
+                y=df["tmpf"],
+                mode="lines+markers",
+                name="HRRR 2m temp",
+                line={"color": "#f59e0b", "width": 2},
+                marker={"size": 6, "color": "#f59e0b"},
+                fill="tozeroy",
+                fillcolor="rgba(245, 158, 11, 0.15)",
+                hovertemplate=(
+                    "<b>%{x|%Y-%m-%d %H:%M UTC}</b><br>"
+                    "Temp: %{y:.1f}°F<br>"
+                    f"Cycle: {init_label}<br>"
+                    "f%{text}<extra></extra>"
+                ),
+                text=df["forecast_hour"].astype(int),
+            )
+        ]
+    )
+
+    # Dynamic Y-axis with a little padding.
+    ymin, ymax = df["tmpf"].min(), df["tmpf"].max()
+    pad = max(1.0, (ymax - ymin) * 0.15)
+    y_min = ymin - pad
+    y_max = ymax + pad
+
+    fig.update_layout(
+        title=f"HRRR 18-hour forecast — {TARGET_ICAO} 2 m temp",
+        xaxis_title="Valid time (UTC)",
+        yaxis_title="Temperature (°F)",
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        font={"color": "#e2e8f0"},
+        margin={"l": 60, "r": 30, "t": 50, "b": 60},
+        yaxis={"range": [y_min, y_max], "gridcolor": "#334155"},
+        xaxis={"gridcolor": "#334155"},
+        showlegend=False,
+        hovermode="x unified",
+    )
+
+    return pyo.plot(fig, output_type="div", include_plotlyjs="cdn", config={"displayModeBar": False})
 
 
 def _metar_vs_hrrr(conn) -> dict:

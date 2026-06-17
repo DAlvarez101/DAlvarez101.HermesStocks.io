@@ -16,6 +16,7 @@ dependencies = [
     "eccodes>=2.38.0",
     "xarray>=2024.1",
     "pytest-mock>=3.12",
+    "plotly>=6.8.0",
 ]
 
 [tool.pytest.ini_options]

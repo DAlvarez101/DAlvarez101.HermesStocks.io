@@ -114,5 +114,6 @@ def test_generate_dashboard_creates_html(populated_db, tmp_path):
     assert "METAR vs HRRR" in html
     assert "85.5°F" in html
     assert "+1.5°F" in html
-    # Three base64 chart images should be embedded: temp trend, HRRR forecast, hourly count.
-    assert html.count("data:image/png;base64,") >= 3
+    # Two matplotlib base64 chart images remain; HRRR is an interactive Plotly chart.
+    assert html.count("data:image/png;base64,") >= 2
+    assert "plotly" in html.lower()
