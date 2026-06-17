@@ -218,35 +218,49 @@ def fetch_target_hrrr_2m_temp(
     return df.iloc[0]
 
 
+def _cycle_has_all_frames(
+    init_dt: pd.Timestamp, max_forecast_hour: int, timeout: float = 15.0
+) -> bool:
+    """Return True iff the .idx files for f01..max_forecast_hour all exist."""
+    for fh in range(1, max_forecast_hour + 1):
+        url = f"{_grib_url(init_dt.to_pydatetime(), fh)}.idx"
+        try:
+            r = requests.head(url, timeout=timeout, allow_redirects=True)
+            if r.status_code != 200:
+                return False
+        except Exception:
+            return False
+    return True
+
+
 def fetch_hrrr_forecast_range(
     stations: Iterable[Station],
     max_forecast_hour: int = 18,
     lookback_hours: int = 6,
     timeout: float = 90.0,
 ) -> pd.DataFrame:
-    """Fetch HRRR 2 m temperature for forecast hours 1..max_forecast_hour.
+    """Fetch a complete HRRR run (f01..max_forecast_hour) for each station.
 
-    Uses the most recent available HRRR cycle and downloads each forecast-hour
-    GRIB2 file individually.  Returns one row per (station, forecast_hour).
+    Walks back through recent cycles and uses the most recent one whose first
+    max_forecast_hour frames are all published.  Every returned row then belongs
+    to the same model run.
     """
-    init_dt, found = _find_latest_cycle(
-        forecast_hour=1, lookback_hours=lookback_hours,
-    )
-    if not found:
+    now = pd.Timestamp(datetime.now(timezone.utc)).tz_convert("UTC")
+    init_dt = None
+    for i in range(lookback_hours + 1):
+        candidate = (now - pd.Timedelta(hours=i)).floor("h")
+        if _cycle_has_all_frames(candidate, max_forecast_hour, timeout=timeout):
+            init_dt = candidate
+            break
+
+    if init_dt is None:
         return pd.DataFrame(columns=HRRR_OUTPUT_COLUMNS)
 
     all_rows: list[dict] = []
     for fh in range(1, max_forecast_hour + 1):
         url = _grib_url(init_dt.to_pydatetime(), fh)
-        try:
-            ds = _cfgrib_subset(url, timeout=timeout)
-        except Exception as exc:
-            # HRRR may not have published all forecast hours yet for the
-            # latest cycle — log and continue with whatever we have.
-            print(f"  HRRR f{fh:02d} unavailable for cycle {init_dt}: {exc}")
-            continue
+        ds = _cfgrib_subset(url, timeout=timeout)
         for s in stations:
-            tmpf = _nearest_temp(ds, s.lat, s.lon)
             all_rows.append(
                 {
                     "station": s.icao.upper(),
@@ -255,7 +269,7 @@ def fetch_hrrr_forecast_range(
                     "valid_dt": _valid_dt(init_dt, fh),
                     "lat": s.lat,
                     "lon": s.lon,
-                    "tmpf": tmpf,
+                    "tmpf": _nearest_temp(ds, s.lat, s.lon),
                 }
             )
 

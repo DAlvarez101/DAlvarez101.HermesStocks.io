@@ -183,7 +183,8 @@ def hrrr_forecast_chart(conn) -> str:
         return _to_base64(fig)
     df["valid_dt"] = pd.to_datetime(df["valid_dt"], utc=True)
     df = df.sort_values("valid_dt")
-    ax.plot(df["valid_dt"], df["tmpf"], color="#f59e0b", linewidth=2, marker="o", markersize=3)
+    ax.plot(df["valid_dt"], df["tmpf"], color="#f59e0b", linewidth=2, marker="o", markersize=4)
+    ax.fill_between(df["valid_dt"], df["tmpf"], alpha=0.15, color="#f59e0b")
     ax.set_title(f"HRRR 18-hour forecast — {TARGET_ICAO} 2 m temp", color="#e2e8f0")
     ax.set_ylabel("Temperature (°F)", color="#e2e8f0")
     ax.set_xlabel("Valid time (UTC)", color="#e2e8f0")
@@ -192,17 +193,6 @@ def hrrr_forecast_chart(conn) -> str:
     ax.grid(True, alpha=0.3, color="#334155")
     for spine in ax.spines.values():
         spine.set_color("#334155")
-    # Add forecast-hour labels at each point.
-    for _, row in df.iterrows():
-        ax.annotate(
-            f"f{int(row['forecast_hour']):02d}",
-            (row["valid_dt"], row["tmpf"]),
-            textcoords="offset points",
-            xytext=(0, 8),
-            fontsize=7,
-            color="#94a3b8",
-            ha="center",
-        )
     return _to_base64(fig)
 
 
