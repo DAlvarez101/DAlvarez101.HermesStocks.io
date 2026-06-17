@@ -11,8 +11,8 @@ class Station:
 
 
 STATIONS = [
-    Station("KDFW", 32.897, -97.038, 607, "target"),
-    Station("KDAL", 32.848, -96.851, 487, "urban_east"),
+    Station("KDFW", 32.897, -97.038, 607, "airport_southwest"),
+    Station("KDAL", 32.848, -96.851, 487, "target"),
     Station("KADS", 33.075, -96.837, 645, "north_suburban"),
     Station("KAFW", 32.990, -97.319, 679, "northwest_exurban"),
     Station("KDTO", 33.200, -97.198, 642, "north_rural"),
@@ -21,5 +21,5 @@ STATIONS = [
     Station("KTYR", 32.354, -95.402, 550, "east_rural"),
 ]
 
-TARGET_ICAO = "KDFW"
+TARGET_ICAO = "KDAL"
 CACHE_DIR = "data/cache"

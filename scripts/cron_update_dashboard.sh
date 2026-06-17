@@ -20,8 +20,8 @@ cd "$PROJECT_DIR"
 # Use project venv explicitly.
 PYTHON="${PROJECT_DIR}/.venv/bin/python"
 
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Ingesting live METARs ..."
-"$PYTHON" scripts/ingest_live_metars.py --db "$DB_PATH" --hours "$HOURS_BACK"
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Ingesting live METARs + HRRR forecast ..."
+"$PYTHON" scripts/ingest_live_metars.py --db "$DB_PATH" --hours "$HOURS_BACK" --hrrr
 
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Generating dashboard ..."
 "$PYTHON" scripts/generate_dashboard.py --db "$DB_PATH" --output-dir "${PAGES_DIR}/${DASHBOARD_SUBDIR}"

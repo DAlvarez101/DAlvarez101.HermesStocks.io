@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from dfw_temp_model.storage.obs_db import get_db, insert_observations
+from dfw_temp_model.storage.obs_db import get_db, insert_hrrr_forecasts, insert_observations
 
 
 @pytest.fixture
@@ -55,6 +55,18 @@ def populated_db(tmp_path):
         },
     ])
     insert_observations(conn, df, source="test")
+    hrrr_df = pd.DataFrame([
+        {
+            "station": "KDAL",
+            "init_dt": "2026-06-16T17:00:00+00:00",
+            "forecast_hour": 1,
+            "valid_dt": "2026-06-16T18:00:00+00:00",
+            "lat": 32.848,
+            "lon": -96.851,
+            "tmpf": 85.5,
+        }
+    ])
+    insert_hrrr_forecasts(conn, hrrr_df, source="test")
     conn.close()
     return str(db_path)
 
@@ -98,6 +110,9 @@ def test_generate_dashboard_creates_html(populated_db, tmp_path):
     assert index_path.exists()
     html = index_path.read_text(encoding="utf-8")
     assert "DFW Live Weather Dashboard" in html
-    assert "KDFW" in html
-    # Two base64 chart images should be embedded.
-    assert html.count("data:image/png;base64,") >= 2
+    assert "KDAL" in html
+    assert "METAR vs HRRR" in html
+    assert "85.5°F" in html
+    assert "+1.5°F" in html
+    # Three base64 chart images should be embedded: temp trend, HRRR forecast, hourly count.
+    assert html.count("data:image/png;base64,") >= 3

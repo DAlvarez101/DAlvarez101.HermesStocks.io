@@ -27,3 +27,11 @@ def test_import_optuna():
 
 def test_import_pytest():
     import pytest as _  # noqa: F401
+
+
+def test_import_cfgrib():
+    import cfgrib as _  # noqa: F401
+
+
+def test_import_eccodes():
+    import eccodes as _  # noqa: F401

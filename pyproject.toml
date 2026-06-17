@@ -12,6 +12,10 @@ dependencies = [
     "optuna>=3.6",
     "pytest>=8.0",
     "matplotlib>=3.8",
+    "cfgrib>=0.9.14",
+    "eccodes>=2.38.0",
+    "xarray>=2024.1",
+    "pytest-mock>=3.12",
 ]
 
 [tool.pytest.ini_options]

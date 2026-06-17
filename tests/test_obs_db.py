@@ -7,6 +7,7 @@ import pytest
 from dfw_temp_model.storage.obs_db import (
     ensure_schema,
     get_db,
+    insert_hrrr_forecasts,
     insert_observations,
     latest_by_station,
     read_all,
@@ -60,6 +61,7 @@ def test_get_db_creates_file(tmp_path):
     cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = {r[0] for r in cur.fetchall()}
     assert "metar_observations" in tables
+    assert "hrrr_forecasts" in tables
     conn.close()
 
 
@@ -67,7 +69,47 @@ def test_ensure_schema_idempotent(empty_conn):
     ensure_schema(empty_conn)
     ensure_schema(empty_conn)
     cur = empty_conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    assert "metar_observations" in {r[0] for r in cur.fetchall()}
+    tables = {r[0] for r in cur.fetchall()}
+    assert "metar_observations" in tables
+    assert "hrrr_forecasts" in tables
+
+
+def test_insert_hrrr_forecasts(empty_conn):
+    df = pd.DataFrame([
+        {
+            "station": "KDFW",
+            "init_dt": "2026-06-17T18:00:00+00:00",
+            "forecast_hour": 1,
+            "valid_dt": "2026-06-17T19:00:00+00:00",
+            "lat": 32.897,
+            "lon": -97.038,
+            "tmpf": 86.5,
+        }
+    ])
+    inserted = insert_hrrr_forecasts(empty_conn, df)
+    assert inserted == 1
+    rows = empty_conn.execute("SELECT * FROM hrrr_forecasts").fetchall()
+    assert len(rows) == 1
+    # columns: id, fetched_at, source, station, init_dt, forecast_hour, valid_dt, lat, lon, tmpf
+    assert rows[0][3] == "KDFW"
+    assert rows[0][5] == 1
+
+
+def test_insert_hrrr_forecasts_idempotent(empty_conn):
+    df = pd.DataFrame([
+        {
+            "station": "KDFW",
+            "init_dt": pd.Timestamp("2026-06-17T18:00:00", tz="UTC"),
+            "forecast_hour": 1,
+            "valid_dt": pd.Timestamp("2026-06-17T19:00:00", tz="UTC"),
+            "lat": 32.897,
+            "lon": -97.038,
+            "tmpf": 86.5,
+        }
+    ])
+    assert insert_hrrr_forecasts(empty_conn, df) == 1
+    assert insert_hrrr_forecasts(empty_conn, df) == 0
+    assert empty_conn.execute("SELECT COUNT(*) FROM hrrr_forecasts").fetchone()[0] == 1
 
 
 def test_insert_observations(empty_conn):

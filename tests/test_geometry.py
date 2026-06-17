@@ -93,25 +93,25 @@ def test_station_geometry_table():
     }
     assert expected_cols.issubset(set(table.columns))
 
-    kdfw = table.loc["KDFW"]
-    assert abs(kdfw["dist_km"]) < 0.01
-    assert abs(kdfw["bearing_from_target_deg"]) < 1.0 or abs(
-        kdfw["bearing_from_target_deg"] - 360
+    kdal = table.loc["KDAL"]
+    assert abs(kdal["dist_km"]) < 0.01
+    assert abs(kdal["bearing_from_target_deg"]) < 1.0 or abs(
+        kdal["bearing_from_target_deg"] - 360
     ) < 1.0
-    assert kdfw["elevation_diff_ft"] == 0
+    assert kdal["elevation_diff_ft"] == 0
 
     # Neighbor distances should be positive
-    neighbors = table[table.index != "KDFW"]
+    neighbors = table[table.index != "KDAL"]
     assert (neighbors["dist_km"] > 0).all()
 
 
 def test_station_geometry_table_custom_target():
     stations = [
-        Station("KDFW", 32.0, -97.0, 500, "target"),
+        Station("KDAL", 32.0, -97.0, 500, "target"),
         Station("NORTH", 33.0, -97.0, 600, "north"),
     ]
     table = station_geometry_table(stations)
-    assert table.loc["KDFW", "dist_km"] < 0.01
+    assert table.loc["KDAL", "dist_km"] < 0.01
     north = table.loc["NORTH"]
     assert north["dist_km"] > 100
     assert 0 <= north["bearing_from_target_deg"] < 1

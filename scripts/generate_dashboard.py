@@ -11,7 +11,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from dfw_temp_model.config import CACHE_DIR, TARGET_ICAO
-from dfw_temp_model.storage.obs_db import get_db, latest_by_station
+from dfw_temp_model.storage.obs_db import (
+    get_db,
+    hrrr_forecast_range,
+    hrrr_for_valid_hour,
+    latest_by_station,
+    latest_hrrr_forecast,
+)
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -32,6 +38,9 @@ HTML_TEMPLATE = """
         .card {{ background: #1e293b; padding: 1rem; border-radius: 0.5rem; }}
         .card h3 {{ margin: 0 0 0.5rem 0; font-size: 0.85rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.03em; }}
         .card p {{ margin: 0; font-size: 1.6rem; font-weight: 600; color: #38bdf8; }}
+        .comparison {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0; max-width: 900px; }}
+        .comparison .card p {{ font-size: 1.4rem; }}
+        .comparison .card small {{ display: block; color: #94a3b8; margin-top: 0.25rem; font-size: 0.75rem; }}
         img {{ max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; border: 1px solid #334155; }}
         .footer {{ margin-top: 2rem; color: #64748b; font-size: 0.85rem; max-width: 900px; }}
         a {{ color: #38bdf8; }}
@@ -39,20 +48,42 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <h1>DFW Live Weather Dashboard</h1>
-    <p>Updated at {updated_at} UTC · Source: AviationWeather.gov METAR JSON</p>
+    <p>Updated at {updated_at} UTC · Sources: AviationWeather.gov METAR JSON, NOAA HRRR AWS Open Data</p>
 
     <div class="stats">
-        <div class="card"><h3>Total observations</h3><p>{total_rows}</p></div>
+        <div class="card"><h3>Total METAR obs</h3><p>{total_rows}</p></div>
         <div class="card"><h3>Stations</h3><p>{station_count}</p></div>
         <div class="card"><h3>First observation</h3><p>{first_obs}</p></div>
         <div class="card"><h3>Latest observation</h3><p>{last_obs}</p></div>
+    </div>
+
+    <h2>METAR vs HRRR at {TARGET_ICAO} — current hour</h2>
+    <div class="comparison">
+        <div class="card">
+            <h3>METAR observed</h3>
+            <p>{metar_tmpf}°F</p>
+            <small>{metar_valid}</small>
+        </div>
+        <div class="card">
+            <h3>HRRR forecast</h3>
+            <p>{hrrr_tmpf}°F</p>
+            <small>Cycle {hrrr_init} · f{hrrr_fxx:02d} · valid {hrrr_valid}</small>
+        </div>
+        <div class="card">
+            <h3>Difference</h3>
+            <p>{delta_text}</p>
+            <small>HRRR minus METAR</small>
+        </div>
     </div>
 
     <h2>Latest readings per station</h2>
     {latest_table}
 
     <h2>Temperature trend ({TARGET_ICAO})</h2>
-    <img src="data:image/png;base64,{kdfw_chart}" alt="KDFW temperature trend">
+    <img src="data:image/png;base64,{kdfw_chart}" alt="{TARGET_ICAO} temperature trend">
+
+    <h2>HRRR 18-hour forecast ({TARGET_ICAO})</h2>
+    <img src="data:image/png;base64,{hrrr_chart}" alt="HRRR 18-hour forecast for {TARGET_ICAO}">
 
     <h2>Hourly observations ingested</h2>
     <img src="data:image/png;base64,{hourly_chart}" alt="Hourly ingestion volume">
@@ -100,7 +131,7 @@ def kdfw_temperature_chart(conn) -> str:
         WHERE station = ? ORDER BY valid
         """,
         conn,
-        params=(TARGET_ICAO,),
+        params=[TARGET_ICAO],
     )
     fig, ax = plt.subplots(figsize=(10, 4), facecolor="#0f172a")
     ax.set_facecolor("#0f172a")
@@ -142,6 +173,90 @@ def hourly_count_chart(conn) -> str:
     return _to_base64(fig)
 
 
+def hrrr_forecast_chart(conn) -> str:
+    """18-hour HRRR 2 m temperature forecast chart for the target station."""
+    df = hrrr_forecast_range(conn, station=TARGET_ICAO, limit=18)
+    fig, ax = plt.subplots(figsize=(10, 4), facecolor="#0f172a")
+    ax.set_facecolor("#0f172a")
+    if df.empty:
+        ax.text(0.5, 0.5, "No HRRR forecast data yet", ha="center", va="center", color="#e2e8f0")
+        return _to_base64(fig)
+    df["valid_dt"] = pd.to_datetime(df["valid_dt"], utc=True)
+    df = df.sort_values("valid_dt")
+    ax.plot(df["valid_dt"], df["tmpf"], color="#f59e0b", linewidth=2, marker="o", markersize=3)
+    ax.set_title(f"HRRR 18-hour forecast — {TARGET_ICAO} 2 m temp", color="#e2e8f0")
+    ax.set_ylabel("Temperature (°F)", color="#e2e8f0")
+    ax.set_xlabel("Valid time (UTC)", color="#e2e8f0")
+    ax.tick_params(axis="x", rotation=45, colors="#e2e8f0")
+    ax.tick_params(axis="y", colors="#e2e8f0")
+    ax.grid(True, alpha=0.3, color="#334155")
+    for spine in ax.spines.values():
+        spine.set_color("#334155")
+    # Add forecast-hour labels at each point.
+    for _, row in df.iterrows():
+        ax.annotate(
+            f"f{int(row['forecast_hour']):02d}",
+            (row["valid_dt"], row["tmpf"]),
+            textcoords="offset points",
+            xytext=(0, 8),
+            fontsize=7,
+            color="#94a3b8",
+            ha="center",
+        )
+    return _to_base64(fig)
+
+
+def _metar_vs_hrrr(conn) -> dict:
+    """Return current-hour METAR and HRRR values for the target station."""
+    metar = pd.read_sql_query(
+        """
+        SELECT valid, tmpf
+        FROM metar_observations
+        WHERE station = ?
+        ORDER BY valid DESC
+        LIMIT 1
+        """,
+        conn,
+        params=[TARGET_ICAO],
+    )
+    hrrr = latest_hrrr_forecast(conn, station=TARGET_ICAO)
+
+    if metar.empty:
+        metar_tmpf = "—"
+        metar_valid = "No METAR data"
+    else:
+        metar_tmpf = round(float(metar.iloc[0]["tmpf"]), 1)
+        metar_valid = metar.iloc[0]["valid"]
+
+    if hrrr.empty:
+        hrrr_tmpf = "—"
+        hrrr_init = "—"
+        hrrr_fxx = 0
+        hrrr_valid = "No HRRR data"
+        delta_text = "—"
+    else:
+        row = hrrr.iloc[0]
+        hrrr_tmpf = round(float(row["tmpf"]), 1)
+        hrrr_init = row["init_dt"]
+        hrrr_fxx = int(row["forecast_hour"])
+        hrrr_valid = row["valid_dt"]
+        if isinstance(metar_tmpf, (int, float)):
+            delta = round(hrrr_tmpf - metar_tmpf, 1)
+            delta_text = f"{delta:+0.1f}°F"
+        else:
+            delta_text = "—"
+
+    return {
+        "metar_tmpf": metar_tmpf,
+        "metar_valid": metar_valid,
+        "hrrr_tmpf": hrrr_tmpf,
+        "hrrr_init": hrrr_init,
+        "hrrr_fxx": hrrr_fxx,
+        "hrrr_valid": hrrr_valid,
+        "delta_text": delta_text,
+    }
+
+
 def generate_dashboard(db_path: str, output_dir: str) -> Path:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -149,6 +264,7 @@ def generate_dashboard(db_path: str, output_dir: str) -> Path:
     conn = get_db(db_path)
     stats = summary_stats(conn)
     latest = latest_by_station(conn)
+    comparison = _metar_vs_hrrr(conn)
     conn.close()
 
     # Format latest table: drop internal id/fetched_at, round floats.
@@ -169,9 +285,11 @@ def generate_dashboard(db_path: str, output_dir: str) -> Path:
         last_obs=stats["last_obs"],
         latest_table=display_latest.to_html(index=False, classes="table", border=0),
         kdfw_chart=kdfw_temperature_chart(get_db(db_path)),
+        hrrr_chart=hrrr_forecast_chart(get_db(db_path)),
         hourly_chart=hourly_count_chart(get_db(db_path)),
         db_path=db_path,
         TARGET_ICAO=TARGET_ICAO,
+        **comparison,
     )
 
     output_path = output_dir / "index.html"
