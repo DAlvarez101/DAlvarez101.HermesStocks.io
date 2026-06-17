@@ -58,9 +58,9 @@ def populated_db(tmp_path):
     hrrr_df = pd.DataFrame([
         {
             "station": "KDAL",
-            "init_dt": "2026-06-16T17:00:00+00:00",
+            "init_dt": "2026-06-16T16:00:00+00:00",
             "forecast_hour": 1,
-            "valid_dt": "2026-06-16T18:00:00+00:00",
+            "valid_dt": "2026-06-16T17:00:00+00:00",
             "lat": 32.848,
             "lon": -96.851,
             "tmpf": 85.5,

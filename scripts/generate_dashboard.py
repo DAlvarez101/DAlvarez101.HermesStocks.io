@@ -18,7 +18,6 @@ from dfw_temp_model.storage.obs_db import (
     hrrr_forecast_range,
     hrrr_for_valid_hour,
     latest_by_station,
-    latest_hrrr_forecast,
 )
 
 HTML_TEMPLATE = """
@@ -233,7 +232,7 @@ def hrrr_forecast_chart(conn) -> str:
 
 
 def _metar_vs_hrrr(conn) -> dict:
-    """Return current-hour METAR and HRRR values for the target station."""
+    """Return current-hour METAR and the matching HRRR forecast for that hour."""
     metar = pd.read_sql_query(
         """
         SELECT valid, tmpf
@@ -245,32 +244,47 @@ def _metar_vs_hrrr(conn) -> dict:
         conn,
         params=[TARGET_ICAO],
     )
-    hrrr = latest_hrrr_forecast(conn, station=TARGET_ICAO)
 
     if metar.empty:
-        metar_tmpf = "—"
-        metar_valid = "No METAR data"
-    else:
-        metar_tmpf = round(float(metar.iloc[0]["tmpf"]), 1)
-        metar_valid = metar.iloc[0]["valid"]
+        return {
+            "metar_tmpf": "—",
+            "metar_valid": "No METAR data",
+            "hrrr_tmpf": "—",
+            "hrrr_init": "—",
+            "hrrr_fxx": 0,
+            "hrrr_valid": "No HRRR data",
+            "delta_text": "—",
+        }
+
+    metar_tmpf = round(float(metar.iloc[0]["tmpf"]), 1)
+    metar_valid = metar.iloc[0]["valid"]
+    metar_dt = pd.to_datetime(metar_valid, utc=True)
+
+    # Find the HRRR forecast valid in the same hour as the latest METAR.
+    # Prefer the forecast from the most recent complete cycle for that valid hour.
+    hrrr = hrrr_for_valid_hour(conn, station=TARGET_ICAO, valid_hour=metar_dt.floor("h"))
 
     if hrrr.empty:
-        hrrr_tmpf = "—"
-        hrrr_init = "—"
-        hrrr_fxx = 0
-        hrrr_valid = "No HRRR data"
-        delta_text = "—"
-    else:
-        row = hrrr.iloc[0]
-        hrrr_tmpf = round(float(row["tmpf"]), 1)
-        hrrr_init = row["init_dt"]
-        hrrr_fxx = int(row["forecast_hour"])
-        hrrr_valid = row["valid_dt"]
-        if isinstance(metar_tmpf, (int, float)):
-            delta = round(hrrr_tmpf - metar_tmpf, 1)
-            delta_text = f"{delta:+0.1f}°F"
-        else:
-            delta_text = "—"
+        return {
+            "metar_tmpf": metar_tmpf,
+            "metar_valid": metar_valid,
+            "hrrr_tmpf": "—",
+            "hrrr_init": "—",
+            "hrrr_fxx": 0,
+            "hrrr_valid": "No HRRR data",
+            "delta_text": "—",
+        }
+
+    # Pick the row with the latest init_dt as the best estimate for that hour.
+    hrrr["init_dt"] = pd.to_datetime(hrrr["init_dt"], utc=True)
+    hrrr["valid_dt"] = pd.to_datetime(hrrr["valid_dt"], utc=True)
+    hrrr = hrrr.sort_values("init_dt", ascending=False).iloc[0]
+
+    hrrr_tmpf = round(float(hrrr["tmpf"]), 1)
+    hrrr_init = hrrr["init_dt"].strftime("%Y-%m-%d %H:%M UTC")
+    hrrr_fxx = int(hrrr["forecast_hour"])
+    hrrr_valid = hrrr["valid_dt"].strftime("%Y-%m-%d %H:%M UTC")
+    delta = round(hrrr_tmpf - metar_tmpf, 1)
 
     return {
         "metar_tmpf": metar_tmpf,
@@ -279,7 +293,7 @@ def _metar_vs_hrrr(conn) -> dict:
         "hrrr_init": hrrr_init,
         "hrrr_fxx": hrrr_fxx,
         "hrrr_valid": hrrr_valid,
-        "delta_text": delta_text,
+        "delta_text": f"{delta:+0.1f}°F",
     }
 
 
