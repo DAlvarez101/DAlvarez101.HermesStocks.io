@@ -1,16 +1,19 @@
 """Main bot orchestrator: fetch market, generate signal, decide, execute."""
 from typing import Optional
 
-from dfw_temp_model.trading.client import PolymarketClient
 from dfw_temp_model.trading.config import TradingConfig
 from dfw_temp_model.trading.decision import decide_trade
 from dfw_temp_model.trading.executor import execute_intent
-from dfw_temp_model.trading.market import MarketMetadata, resolve_market
-from dfw_temp_model.trading.signal import forecast_high_temp
+from dfw_temp_model.trading.market import resolve_market
 
 
 def run_bot(cfg: TradingConfig, db_path: str) -> dict:
     """Run one trading iteration and return a report dict."""
+    # Lazy imports avoid loading the CLOB client (web3/py_clob) and scipy
+    # in the same import-time context, which can deadlock in some environments.
+    from dfw_temp_model.trading.client import PolymarketClient
+    from dfw_temp_model.trading.signal import forecast_high_temp
+
     market = resolve_market(cfg.market_search_query)
     if market is None:
         return {"status": "NO_MARKET", "reason": f"No market found for: {cfg.market_search_query}"}

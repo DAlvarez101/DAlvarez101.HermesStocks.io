@@ -3,7 +3,6 @@ import re
 from typing import Optional
 
 import pandas as pd
-from scipy.stats import norm
 
 from dfw_temp_model.config import TARGET_ICAO
 from dfw_temp_model.storage.obs_db import get_db, hrrr_forecast_for_cycle, latest_complete_hrrr_cycle
@@ -12,6 +11,9 @@ from dfw_temp_model.storage.obs_db import latest_by_station
 
 def probability_above_threshold(mean_temp: float, std: float, threshold: float) -> float:
     """Probability that the true high exceeds *threshold* under a Gaussian model."""
+    # Lazy import scipy inside the function to avoid a deadlock when this module
+    # is imported alongside modules that load web3/py_clob_client_v2.
+    from scipy.stats import norm
     if std <= 0:
         return 1.0 if mean_temp > threshold else 0.0
     return float(1.0 - norm.cdf(threshold, loc=mean_temp, scale=std))
