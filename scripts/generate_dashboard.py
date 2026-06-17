@@ -15,9 +15,10 @@ import plotly.offline as pyo
 from dfw_temp_model.config import CACHE_DIR, TARGET_ICAO
 from dfw_temp_model.storage.obs_db import (
     get_db,
+    hrrr_forecast_for_cycle,
     hrrr_forecast_range,
-    hrrr_for_valid_hour,
     latest_by_station,
+    latest_complete_hrrr_cycle,
 )
 
 HTML_TEMPLATE = """
@@ -175,14 +176,22 @@ def hourly_count_chart(conn) -> str:
 
 
 def hrrr_forecast_chart(conn) -> str:
-    """Interactive Plotly HRRR 2 m temperature forecast chart for the target station."""
-    df = hrrr_forecast_range(conn, station=TARGET_ICAO, limit=18)
-    if df.empty:
+    """Interactive Plotly HRRR 2 m temperature forecast chart for the target station.
+
+    Uses the latest complete cycle in the DB (same cycle that backs the METAR
+    comparison) so the chart and the comparison card never drift apart.
+    """
+    init_dt_str = latest_complete_hrrr_cycle(conn, TARGET_ICAO, required_hours=18)
+    if init_dt_str is None:
         return "<p>No HRRR forecast data yet</p>"
+
+    df = hrrr_forecast_for_cycle(conn, TARGET_ICAO, init_dt_str)
+    if df.empty or len(df) < 18:
+        return "<p>Complete HRRR forecast cycle not available</p>"
 
     df["valid_dt"] = pd.to_datetime(df["valid_dt"], utc=True)
     df["init_dt"] = pd.to_datetime(df["init_dt"], utc=True)
-    df = df.sort_values("valid_dt")
+    df = df.sort_values("forecast_hour")
     init_label = df["init_dt"].iloc[0].strftime("%Y-%m-%d %H:%M UTC")
 
     fig = go.Figure(
@@ -214,7 +223,7 @@ def hrrr_forecast_chart(conn) -> str:
     y_max = ymax + pad
 
     fig.update_layout(
-        title=f"HRRR 18-hour forecast — {TARGET_ICAO} 2 m temp",
+        title=f"HRRR 18-hour forecast — {TARGET_ICAO} 2 m temp<br><sup>Cycle {init_label}</sup>",
         xaxis_title="Valid time (UTC)",
         yaxis_title="Temperature (°F)",
         template="plotly_dark",
@@ -259,12 +268,11 @@ def _metar_vs_hrrr(conn) -> dict:
     metar_tmpf = round(float(metar.iloc[0]["tmpf"]), 1)
     metar_valid = metar.iloc[0]["valid"]
     metar_dt = pd.to_datetime(metar_valid, utc=True)
+    metar_hour = metar_dt.floor("h")
 
-    # Find the HRRR forecast valid in the same hour as the latest METAR.
-    # Prefer the forecast from the most recent complete cycle for that valid hour.
-    hrrr = hrrr_for_valid_hour(conn, station=TARGET_ICAO, valid_hour=metar_dt.floor("h"))
-
-    if hrrr.empty:
+    # Use the same latest complete HRRR cycle as the chart.
+    init_dt_str = latest_complete_hrrr_cycle(conn, TARGET_ICAO, required_hours=18)
+    if init_dt_str is None:
         return {
             "metar_tmpf": metar_tmpf,
             "metar_valid": metar_valid,
@@ -275,10 +283,13 @@ def _metar_vs_hrrr(conn) -> dict:
             "delta_text": "—",
         }
 
-    # Pick the row with the latest init_dt as the best estimate for that hour.
-    hrrr["init_dt"] = pd.to_datetime(hrrr["init_dt"], utc=True)
-    hrrr["valid_dt"] = pd.to_datetime(hrrr["valid_dt"], utc=True)
-    hrrr = hrrr.sort_values("init_dt", ascending=False).iloc[0]
+    df = hrrr_forecast_for_cycle(conn, TARGET_ICAO, init_dt_str)
+    df["valid_dt"] = pd.to_datetime(df["valid_dt"], utc=True)
+    df["init_dt"] = pd.to_datetime(df["init_dt"], utc=True)
+
+    # Find the forecast hour whose valid time is closest to the METAR hour.
+    df["hour_diff"] = (df["valid_dt"] - metar_hour).abs()
+    hrrr = df.sort_values("hour_diff").iloc[0]
 
     hrrr_tmpf = round(float(hrrr["tmpf"]), 1)
     hrrr_init = hrrr["init_dt"].strftime("%Y-%m-%d %H:%M UTC")

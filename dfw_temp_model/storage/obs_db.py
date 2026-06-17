@@ -265,6 +265,43 @@ def hrrr_forecast_range(
     return pd.read_sql_query(query, conn, params=[station, limit])
 
 
+def latest_complete_hrrr_cycle(
+    conn: sqlite3.Connection, station: str, required_hours: int = 18
+) -> Optional[str]:
+    """Return the latest init_dt (ISO string) that has >= required_hours frames."""
+    df = pd.read_sql_query(
+        """
+        SELECT init_dt, COUNT(*) AS n
+        FROM hrrr_forecasts
+        WHERE station = ?
+        GROUP BY init_dt
+        HAVING n >= ?
+        ORDER BY init_dt DESC
+        LIMIT 1
+        """,
+        conn,
+        params=[station, required_hours],
+    )
+    if df.empty:
+        return None
+    return str(df.iloc[0]["init_dt"])
+
+
+def hrrr_forecast_for_cycle(
+    conn: sqlite3.Connection, station: str, init_dt: str
+) -> pd.DataFrame:
+    """Return every forecast hour for a given station and model cycle."""
+    return pd.read_sql_query(
+        """
+        SELECT * FROM hrrr_forecasts
+        WHERE station = ? AND init_dt = ?
+        ORDER BY forecast_hour ASC
+        """,
+        conn,
+        params=[station, init_dt],
+    )
+
+
 def row_count(conn: sqlite3.Connection) -> int:
     """Return total METAR row count."""
     return conn.execute("SELECT COUNT(*) FROM metar_observations").fetchone()[0]

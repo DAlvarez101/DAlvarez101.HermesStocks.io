@@ -55,17 +55,20 @@ def populated_db(tmp_path):
         },
     ])
     insert_observations(conn, df, source="test")
-    hrrr_df = pd.DataFrame([
-        {
-            "station": "KDAL",
-            "init_dt": "2026-06-16T16:00:00+00:00",
-            "forecast_hour": 1,
-            "valid_dt": "2026-06-16T17:00:00+00:00",
-            "lat": 32.848,
-            "lon": -96.851,
-            "tmpf": 85.5,
-        }
-    ])
+    hrrr_rows = []
+    for fh in range(1, 19):
+        hrrr_rows.append(
+            {
+                "station": "KDAL",
+                "init_dt": "2026-06-16T16:00:00+00:00",
+                "forecast_hour": fh,
+                "valid_dt": (pd.Timestamp("2026-06-16T16:00:00+00:00") + pd.Timedelta(hours=fh)).isoformat(),
+                "lat": 32.848,
+                "lon": -96.851,
+                "tmpf": 85.5 + (fh - 1) * 0.1,
+            }
+        )
+    hrrr_df = pd.DataFrame(hrrr_rows)
     insert_hrrr_forecasts(conn, hrrr_df, source="test")
     conn.close()
     return str(db_path)
