@@ -246,9 +246,11 @@ def fetch_hrrr_forecast_range(
     to the same model run.
     """
     now = pd.Timestamp(datetime.now(timezone.utc)).tz_convert("UTC")
+    # At cron time (five past the hour), the current hour's run is usually not
+    # fully published yet. Prefer the previous UTC hour's run.
     init_dt = None
     for i in range(lookback_hours + 1):
-        candidate = (now - pd.Timedelta(hours=i)).floor("h")
+        candidate = (now - pd.Timedelta(hours=1 + i)).floor("h")
         if _cycle_has_all_frames(candidate, max_forecast_hour, timeout=timeout):
             init_dt = candidate
             break
