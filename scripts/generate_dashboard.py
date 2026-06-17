@@ -76,14 +76,14 @@ HTML_TEMPLATE = """
         </div>
     </div>
 
+    <h2>HRRR 18-hour forecast ({TARGET_ICAO})</h2>
+    <img src="data:image/png;base64,{hrrr_chart}" alt="HRRR 18-hour forecast for {TARGET_ICAO}">
+
     <h2>Latest readings per station</h2>
     {latest_table}
 
     <h2>Temperature trend ({TARGET_ICAO})</h2>
     <img src="data:image/png;base64,{kdfw_chart}" alt="{TARGET_ICAO} temperature trend">
-
-    <h2>HRRR 18-hour forecast ({TARGET_ICAO})</h2>
-    <img src="data:image/png;base64,{hrrr_chart}" alt="HRRR 18-hour forecast for {TARGET_ICAO}">
 
     <h2>Hourly observations ingested</h2>
     <img src="data:image/png;base64,{hourly_chart}" alt="Hourly ingestion volume">
