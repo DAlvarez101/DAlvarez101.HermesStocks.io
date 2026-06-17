@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from py_clob_client_v2 import ClobClient
-from py_clob_client_v2.clob_types import ApiCreds
+from py_clob_client_v2.clob_types import ApiCreds, AssetType, BalanceAllowanceParams, OrderArgsV2
 from py_clob_client_v2.order_builder.constants import BUY, SELL
 
 from dfw_temp_model.trading.config import TradingConfig
@@ -81,8 +81,9 @@ class PolymarketClient:
         return self._client.get_address()
 
     def get_balance(self) -> dict:
-        """Return available USDC balance and POL balance from CLOB."""
-        return self._client.get_balance()  # type: ignore[no-any-return]
+        """Return USDC and conditional token balances/allowances for this wallet."""
+        params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)  # type: ignore[arg-type]
+        return self._client.get_balance_allowance(params)  # type: ignore[no-any-return]
 
     def get_order_book(self, token_id: str, side: Optional[str] = None) -> dict:
         """Return order book for a token."""
@@ -111,12 +112,15 @@ class PolymarketClient:
             }
 
         side_const = BUY if side.upper() == "BUY" else SELL
-        return self._client.create_and_post_limit_order(  # type: ignore[no-any-return]
-            token_id=token_id,
-            price=price,
-            size=size,
-            side=side_const,
+        order = self._client.create_order(
+            order_args=OrderArgsV2(
+                token_id=token_id,
+                price=price,
+                size=size,
+                side=side_const,
+            ),
         )
+        return self._client.post_order(order)  # type: ignore[no-any-return]
 
     def cancel_all_orders(self) -> dict:
         """Cancel all open orders. Useful for risk-off."""
