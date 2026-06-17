@@ -1,0 +1,34 @@
+[project]
+name = "dfw-temp-model"
+version = "0.1.0"
+description = "DFW-area temperature advection model for prediction market research"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "requests>=2.31",
+    "pyproj>=3.6",
+    "scikit-learn>=1.3",
+    "optuna>=3.6",
+    "pytest>=8.0",
+    "matplotlib>=3.8",
+    "cfgrib>=0.9.14",
+    "eccodes>=2.38.0",
+    "xarray>=2024.1",
+    "pytest-mock>=3.12",
+    "plotly>=6.8.0",
+    "py-clob-client-v2>=1.0.1",
+    "web3>=7.0",
+    "scipy>=1.11",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "network: tests that require network access",
+    "slow: tests that take a long time to run",
+]
+
+[tool.setuptools.packages.find]
+include = ["dfw_temp_model*"]
+exclude = ["data*", "notebooks*", "scripts*", "tests*"]

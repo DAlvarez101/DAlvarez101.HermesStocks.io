@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Data cache
+data/cache/
+*.parquet
+
+# IDE
+.vscode/
+.idea/
+
+logs/
