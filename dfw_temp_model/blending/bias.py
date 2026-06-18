@@ -124,3 +124,86 @@ def apply_bias_correction(
     result["uncertainty_low"] = result["tmpf_corrected"] - bias_std
     result["uncertainty_high"] = result["tmpf_corrected"] + bias_std
     return result
+
+
+def compute_trend_correction(
+    cycles_df: pd.DataFrame,
+    target_init: str,
+    trend_weight: float = 0.15,
+    halflife_hours: float = 6.0,
+) -> pd.DataFrame:
+    """Compute a per-valid-hour trend correction from multiple forecast cycles.
+
+    For each valid hour, fits a weighted linear slope of forecast temperature
+    vs. cycle age (hours before the target cycle). Newer cycles weigh more
+    (exponential decay). The trend correction is ``-slope * trend_weight``.
+
+    Parameters
+    ----------
+    cycles_df : pd.DataFrame
+        Must have columns ``valid_dt`` (str, ISO datetime), ``init_dt``
+        (str, ISO datetime), and ``tmpf`` (float). Contains forecasts from
+        multiple cycles for one or more valid hours.
+    target_init : str
+        The init_dt of the target cycle (the one being corrected).
+    trend_weight : float
+        Fraction of the raw slope to apply as correction. 0.15 = 15%.
+    halflife_hours : float
+        Half-life for exponential weighting of cycles by age. Newer cycles
+        weigh more.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: ``valid_dt`` (str, ISO datetime), ``trend_correction``
+        (float, degrees F), ``n_cycles`` (int, number of cycles used).
+    """
+    if cycles_df.empty:
+        return pd.DataFrame(columns=["valid_dt", "trend_correction", "n_cycles"])
+
+    df = cycles_df.copy()
+    df["valid_dt"] = pd.to_datetime(df["valid_dt"], utc=True)
+    df["init_dt"] = pd.to_datetime(df["init_dt"], utc=True)
+    target_ts = pd.to_datetime(target_init, utc=True)
+
+    # Age of each cycle in hours (how old relative to target)
+    df["cycle_age_h"] = (target_ts - df["init_dt"]).dt.total_seconds() / 3600.0
+
+    results = []
+    for vdt, group in df.groupby("valid_dt"):
+        group = group.sort_values("cycle_age_h")
+        if len(group) < 2:
+            results.append({
+                "valid_dt": vdt.isoformat(),
+                "trend_correction": 0.0,
+                "n_cycles": len(group),
+            })
+            continue
+
+        # Exponential weights: newer cycles (smaller age) weigh more.
+        ages = group["cycle_age_h"].values
+        weights = np.power(2.0, -ages / halflife_hours)
+        weights = weights / weights.sum()
+
+        # Weighted linear regression: tmpf = slope * age + intercept
+        x = ages
+        y = group["tmpf"].values
+        w_mean_x = np.average(x, weights=weights)
+        w_mean_y = np.average(y, weights=weights)
+        cov_xy = np.average((x - w_mean_x) * (y - w_mean_y), weights=weights)
+        var_x = np.average((x - w_mean_x) ** 2, weights=weights)
+        slope = cov_xy / var_x if var_x > 0 else 0.0
+
+        # Positive slope = older cycles were warmer, newer are cooler -> cooling
+        # We want to pull in the direction the model is trending.
+        # If slope > 0 (cooling), correction = -slope * weight (negative).
+        # If slope < 0 (warming), correction = -slope * weight (positive).
+        correction = -slope * trend_weight
+
+        results.append({
+            "valid_dt": vdt.isoformat(),
+            "trend_correction": round(float(correction), 4),
+            "n_cycles": len(group),
+        })
+
+    return pd.DataFrame(results)

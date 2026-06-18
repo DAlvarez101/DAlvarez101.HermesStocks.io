@@ -14,6 +14,7 @@ import pandas as pd
 from dfw_temp_model.blending.bias import (
     apply_bias_correction,
     compute_rolling_bias,
+    compute_trend_correction,
 )
 from dfw_temp_model.blending.providers import ForecastProvider
 
@@ -64,6 +65,29 @@ def _load_forecast_for_matching(
     return pd.concat(frames, ignore_index=True)
 
 
+def _load_all_cycles_for_trend(
+    conn: sqlite3.Connection,
+    provider: ForecastProvider,
+    station: str,
+    cycles: list[str],
+) -> pd.DataFrame:
+    """Load forecast rows from multiple cycles for trend computation.
+
+    Returns a DataFrame with valid_dt, init_dt, and tmpf columns.
+    Unlike _load_forecast_for_matching, this keeps init_dt so we can
+    compute per-cycle trends at each valid hour.
+    """
+    frames = []
+    for init_dt in cycles:
+        df = provider.fetch_forecast(conn, station, init_dt)
+        if df.empty:
+            continue
+        frames.append(df[["valid_dt", "init_dt", "tmpf"]])
+    if not frames:
+        return pd.DataFrame(columns=["valid_dt", "init_dt", "tmpf"])
+    return pd.concat(frames, ignore_index=True)
+
+
 def blended_forecast(
     conn: sqlite3.Connection,
     station: str,
@@ -71,6 +95,7 @@ def blended_forecast(
     init_dt: str | None = None,
     halflife_hours: float = 6.0,
     uncertainty_multiplier: float = 1.0,
+    trend_weight: float = 0.0,
 ) -> pd.DataFrame:
     """Compute a bias-corrected forecast for a station.
 
@@ -89,13 +114,18 @@ def blended_forecast(
         matter more.
     uncertainty_multiplier : float
         Multiplier for the bias std to form the uncertainty band.
+    trend_weight : float
+        Fraction of the model trend slope to apply as an additional
+        correction. 0.0 = no trend correction (default). 0.15 = slight
+        pull toward the direction recent HRRR cycles are trending.
 
     Returns
     -------
     pd.DataFrame
         One row per forecast hour with columns: ``valid_dt``, ``tmpf``
         (raw), ``tmpf_corrected``, ``uncertainty_low``, ``uncertainty_high``,
-        ``forecast_hour``, ``bias_applied``, ``init_dt``.
+        ``forecast_hour``, ``bias_applied``, ``trend_correction``,
+        ``tmpf_trend_adjusted``, ``init_dt``.
     """
     # Determine which cycle to correct
     if init_dt is None:
@@ -125,6 +155,28 @@ def blended_forecast(
 
     # Apply bias correction
     result = apply_bias_correction(forecast, bias_df, uncertainty_multiplier=uncertainty_multiplier)
+
+    # Compute and apply trend correction if requested
+    if trend_weight > 0.0 and len(all_cycles) > 1:
+        trend_cycles = _load_all_cycles_for_trend(conn, provider, station, all_cycles)
+        trend_df = compute_trend_correction(trend_cycles, init_dt, trend_weight=trend_weight)
+
+        if not trend_df.empty:
+            trend_df["valid_dt"] = pd.to_datetime(trend_df["valid_dt"], utc=True)
+            result["valid_dt"] = pd.to_datetime(result["valid_dt"], utc=True)
+            result = result.merge(
+                trend_df[["valid_dt", "trend_correction", "n_cycles"]],
+                on="valid_dt",
+                how="left",
+            )
+            result["trend_correction"] = result["trend_correction"].fillna(0.0)
+            result["tmpf_trend_adjusted"] = result["tmpf_corrected"] + result["trend_correction"]
+        else:
+            result["trend_correction"] = 0.0
+            result["tmpf_trend_adjusted"] = result["tmpf_corrected"]
+    else:
+        result["trend_correction"] = 0.0
+        result["tmpf_trend_adjusted"] = result["tmpf_corrected"]
 
     return result
 

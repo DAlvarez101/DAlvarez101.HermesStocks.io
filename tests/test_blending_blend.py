@@ -105,3 +105,30 @@ def test_list_recent_cycles():
     assert len(cycles) >= 1
     assert "2026-06-17T18:00:00+00:00" in cycles
     conn.close()
+
+
+def test_blended_forecast_has_trend_correction():
+    """blended_forecast with trend_weight > 0 returns trend columns."""
+    conn = _make_db()
+    provider = HRRRProvider()
+    result = blended_forecast(
+        conn, "KDAL", provider,
+        init_dt="2026-06-17T18:00:00+00:00",
+        trend_weight=0.15,
+    )
+    assert "trend_correction" in result.columns
+    assert "tmpf_trend_adjusted" in result.columns
+    conn.close()
+
+
+def test_blended_forecast_trend_weight_zero():
+    """When trend_weight=0, trend_adjusted = bias_corrected (no trend change)."""
+    conn = _make_db()
+    provider = HRRRProvider()
+    result = blended_forecast(
+        conn, "KDAL", provider,
+        init_dt="2026-06-17T18:00:00+00:00",
+        trend_weight=0.0,
+    )
+    assert (result["tmpf_trend_adjusted"] == result["tmpf_corrected"]).all()
+    conn.close()
