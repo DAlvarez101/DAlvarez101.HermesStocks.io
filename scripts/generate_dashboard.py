@@ -216,11 +216,11 @@ def hrrr_forecast_chart(conn) -> str:
     Uses the latest complete cycle in the DB (same cycle that backs the METAR
     comparison) so the chart and the comparison card never drift apart.
     """
-    init_dt_str = latest_complete_hrrr_cycle(conn, TARGET_ICAO, required_hours=18)
+    init_dt_str = latest_complete_hrrr_cycle(conn, TARGET_ICAO, required_hours=18, source="hrrr-aws")
     if init_dt_str is None:
         return "<p>No HRRR forecast data yet</p>"
 
-    df = hrrr_forecast_for_cycle(conn, TARGET_ICAO, init_dt_str)
+    df = hrrr_forecast_for_cycle(conn, TARGET_ICAO, init_dt_str, source="hrrr-aws")
     if df.empty or len(df) < 18:
         return "<p>Complete HRRR forecast cycle not available</p>"
 
@@ -603,7 +603,7 @@ def _metar_vs_hrrr(conn) -> dict:
     metar_hour = metar_dt.floor("h")
 
     # Use the same latest complete HRRR cycle as the chart.
-    init_dt_str = latest_complete_hrrr_cycle(conn, TARGET_ICAO, required_hours=18)
+    init_dt_str = latest_complete_hrrr_cycle(conn, TARGET_ICAO, required_hours=18, source="hrrr-aws")
     if init_dt_str is None:
         return {
             "metar_tmpf": metar_tmpf,
@@ -617,7 +617,7 @@ def _metar_vs_hrrr(conn) -> dict:
             "delta_text": "—",
         }
 
-    df = hrrr_forecast_for_cycle(conn, TARGET_ICAO, init_dt_str)
+    df = hrrr_forecast_for_cycle(conn, TARGET_ICAO, init_dt_str, source="hrrr-aws")
     df["valid_dt"] = pd.to_datetime(df["valid_dt"], utc=True)
     df["init_dt"] = pd.to_datetime(df["init_dt"], utc=True)
 
@@ -679,6 +679,7 @@ def generate_dashboard(db_path: str, output_dir: str) -> Path:
         latest_table=display_latest.to_html(index=False, classes="table", border=0),
         kdfw_chart=kdfw_temperature_chart(get_db(db_path)),
         hrrr_chart=hrrr_forecast_chart(get_db(db_path)),
+        nbm_chart=nbm_forecast_chart(get_db(db_path)),
         blended_chart=blended_forecast_chart(get_db(db_path)),
         hourly_chart=hourly_count_chart(get_db(db_path)),
         db_path=db_path,
