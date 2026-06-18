@@ -95,9 +95,22 @@ def _read_temp_pixel(url: str, lat: float, lon: float, timeout: float = 60.0) ->
     """Read a single temperature pixel from an NBM COG file via HTTP range request.
 
     Returns temperature in Fahrenheit (NBM stores int16 Fahrenheit directly).
+
+    The NBM COG uses a Lambert Conformal Conic projected CRS (meters), not
+    geographic lat/lon. We must transform (lon, lat) from EPSG:4326 to the
+    source CRS before calling ``src.index()``.
     """
+    from rasterio.warp import transform as warp_transform
+
     with rasterio.open(url) as src:
-        col, row = src.index(lon, lat)
+        # Transform lat/lon (EPSG:4326) to the NBM's projected CRS (meters).
+        xs, ys = warp_transform(
+            {"init": "EPSG:4326"},
+            src.crs,
+            [lon],
+            [lat],
+        )
+        col, row = src.index(xs[0], ys[0])
         val = src.read(1, window=((row, row + 1), (col, col + 1)))[0][0]
         if val == src.nodata:
             return float("nan")
