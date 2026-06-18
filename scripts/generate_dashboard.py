@@ -338,7 +338,7 @@ def blended_forecast_chart(conn) -> str:
     dropdown_buttons = []
 
     for i, cycle_dt in enumerate(cycles):
-        blended = blended_forecast(conn, TARGET_ICAO, provider, init_dt=cycle_dt)
+        blended = blended_forecast(conn, TARGET_ICAO, provider, init_dt=cycle_dt, trend_weight=0.15)
         if blended.empty:
             continue
 
@@ -401,14 +401,33 @@ def blended_forecast_chart(conn) -> str:
             visible=(i == 0),
         ))
 
+        # Trend-adjusted (bias correction + model trend)
+        if "tmpf_trend_adjusted" in blended.columns:
+            fig.add_trace(go.Scatter(
+                x=blended["valid_dt"],
+                y=blended["tmpf_trend_adjusted"],
+                mode="lines+markers",
+                name=f"Trend-adjusted (cycle {i+1})",
+                line={"color": "#a78bfa", "width": 2},
+                marker={"size": 5, "color": "#a78bfa"},
+                hovertemplate=(
+                    f"<b>Trend-adjusted</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>"
+                    f"%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>"
+                    f"Bias: {bias_val:+.1f}°F + trend<br>"
+                    f"Cycle: {init_label} · {init_ct}<extra></extra>"
+                ),
+                customdata=ct_labels,
+                visible=(i == 0),
+            ))
+
         # Build visibility list for this dropdown option
-        n_traces_per_cycle = 3
+        n_traces_per_cycle = 4 if "tmpf_trend_adjusted" in blended.columns else 3
         visibility = [True] * n_metar  # METAR always on
         for j in range(len(cycles)):
             if j == i:
-                visibility.extend([True, True, True])
+                visibility.extend([True] * n_traces_per_cycle)
             else:
-                visibility.extend([False, False, False])
+                visibility.extend([False] * n_traces_per_cycle)
 
         dropdown_buttons.append(dict(
             label=init_ts.strftime("%m/%d %H:00Z"),
@@ -431,7 +450,7 @@ def blended_forecast_chart(conn) -> str:
         )
 
     fig.update_layout(
-        title=f"Bias-Corrected Forecast — {TARGET_ICAO}<br><sup>HRRR raw (orange) vs corrected (green) vs METAR (blue)</sup>",
+        title=f"Blended Forecast — {TARGET_ICAO}<br><sup>raw (orange) · bias-corrected (green) · trend-adjusted (purple) · METAR (blue)</sup>",
         xaxis_title="Valid time (UTC)",
         yaxis_title="Temperature (°F)",
         template="plotly_dark",
