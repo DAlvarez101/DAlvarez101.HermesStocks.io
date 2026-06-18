@@ -294,31 +294,50 @@ def blended_forecast_chart(conn) -> str:
     # Limit to the 5 most recent cycles for the dropdown
     cycles = cycles[:5]
 
-    # Load METAR observations for overlay
-    metar_df = pd.read_sql_query(
-        "SELECT valid, tmpf FROM metar_observations WHERE station = ? ORDER BY valid",
+    # Load ALL observations for overlay (both 5-minute NWS API and hourly AviationWeather)
+    obs_df = pd.read_sql_query(
+        "SELECT valid, tmpf, source FROM metar_observations WHERE station = ? AND tmpf IS NOT NULL ORDER BY valid",
         conn,
         params=[TARGET_ICAO],
     )
-    if not metar_df.empty:
-        metar_df["valid"] = pd.to_datetime(metar_df["valid"], utc=True)
-        metar_df["valid_hour"] = metar_df["valid"].dt.floor("h")
-        # Take the latest observation per hour
-        metar_hourly = metar_df.sort_values("valid").groupby("valid_hour").tail(1)
-        metar_hourly["ct_label"] = metar_hourly["valid"].apply(
+    if not obs_df.empty:
+        obs_df["valid"] = pd.to_datetime(obs_df["valid"], utc=True)
+        obs_df["ct_label"] = obs_df["valid"].apply(
             lambda dt: dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT")
         )
+        # Split into 5-minute (nws-api) and hourly (aviationweather) for separate traces
+        obs_5min = obs_df[obs_df["source"] == "nws-api"].copy()
+        obs_hourly = obs_df[obs_df["source"] == "aviationweather"].copy()
     else:
-        metar_hourly = pd.DataFrame()
+        obs_5min = pd.DataFrame()
+        obs_hourly = pd.DataFrame()
 
     # Build one trace-set per cycle for the dropdown
     fig = go.Figure()
 
-    # Add METAR observations (always visible, shared across all dropdown views)
-    if not metar_hourly.empty:
+    # Add 5-minute NWS API observations (smaller, lighter markers)
+    if not obs_5min.empty:
         fig.add_trace(go.Scatter(
-            x=metar_hourly["valid_hour"],
-            y=metar_hourly["tmpf"],
+            x=obs_5min["valid"],
+            y=obs_5min["tmpf"],
+            mode="markers",
+            name="5-min obs (NWS API)",
+            marker={"size": 4, "color": "#818cf8", "symbol": "circle", "opacity": 0.6},
+            hovertemplate=(
+                "<b>5-min obs</b><br>"
+                "%{x|%Y-%m-%d %H:%M UTC}<br>"
+                "%{customdata}<br>"
+                "Temp: %{y:.1f}°F<extra></extra>"
+            ),
+            customdata=obs_5min.get("ct_label", ""),
+            visible=True,
+        ))
+
+    # Add hourly METAR observations (larger blue markers, as before)
+    if not obs_hourly.empty:
+        fig.add_trace(go.Scatter(
+            x=obs_hourly["valid"],
+            y=obs_hourly["tmpf"],
             mode="markers",
             name="METAR observed",
             marker={"size": 8, "color": "#38bdf8", "symbol": "circle"},
@@ -328,13 +347,13 @@ def blended_forecast_chart(conn) -> str:
                 "%{customdata}<br>"
                 "Temp: %{y:.1f}°F<extra></extra>"
             ),
-            customdata=metar_hourly.get("ct_label", ""),
+            customdata=obs_hourly.get("ct_label", ""),
             visible=True,
         ))
 
     # For each cycle, add: raw HRRR, corrected, uncertainty band
     # We toggle visibility via dropdown buttons
-    n_metar = 1 if not metar_hourly.empty else 0
+    n_obs_traces = int(not obs_5min.empty) + int(not obs_hourly.empty)
     dropdown_buttons = []
 
     for i, cycle_dt in enumerate(cycles):
@@ -422,7 +441,7 @@ def blended_forecast_chart(conn) -> str:
 
         # Build visibility list for this dropdown option
         n_traces_per_cycle = 4 if "tmpf_trend_adjusted" in blended.columns else 3
-        visibility = [True] * n_metar  # METAR always on
+        visibility = [True] * n_obs_traces  # observation traces always on
         for j in range(len(cycles)):
             if j == i:
                 visibility.extend([True] * n_traces_per_cycle)
@@ -450,7 +469,7 @@ def blended_forecast_chart(conn) -> str:
         )
 
     fig.update_layout(
-        title=f"Blended Forecast — {TARGET_ICAO}<br><sup>raw (orange) · bias-corrected (green) · trend-adjusted (purple) · METAR (blue)</sup>",
+        title=f"Blended Forecast — {TARGET_ICAO}<br><sup>raw (orange) · corrected (green) · trend (purple) · 5-min obs (indigo) · METAR (blue)</sup>",
         xaxis_title="Valid time (UTC)",
         yaxis_title="Temperature (°F)",
         template="plotly_dark",
