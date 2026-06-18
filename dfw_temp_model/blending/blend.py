@@ -20,12 +20,17 @@ from dfw_temp_model.blending.providers import ForecastProvider
 
 
 def _load_metar_for_station(conn: sqlite3.Connection, station: str) -> pd.DataFrame:
-    """Load METAR observations for a station, floored to the hour."""
+    """Load all observations for a station, floored to the hour for matching.
+
+    Returns ALL observations (both 5-minute NWS API and hourly AviationWeather)
+    without deduplication. The compute_rolling_bias function handles
+    aggregation via groupby(valid_hour).mean().
+    """
     df = pd.read_sql_query(
         """
         SELECT valid, tmpf
         FROM metar_observations
-        WHERE station = ?
+        WHERE station = ? AND tmpf IS NOT NULL
         ORDER BY valid
         """,
         conn,
@@ -34,8 +39,6 @@ def _load_metar_for_station(conn: sqlite3.Connection, station: str) -> pd.DataFr
     if df.empty:
         return pd.DataFrame(columns=["valid_hour", "tmpf_obs"])
     df["valid_hour"] = pd.to_datetime(df["valid"], utc=True).dt.floor("h")
-    # If multiple obs in the same hour, take the latest one
-    df = df.sort_values("valid").groupby("valid_hour").tail(1)
     df = df.rename(columns={"tmpf": "tmpf_obs"})
     return df[["valid_hour", "tmpf_obs"]]
 

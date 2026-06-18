@@ -132,3 +132,29 @@ def test_blended_forecast_trend_weight_zero():
     )
     assert (result["tmpf_trend_adjusted"] == result["tmpf_corrected"]).all()
     conn.close()
+
+
+def test_load_metar_uses_all_observations():
+    """_load_metar_for_station should return all obs, not just one per hour."""
+    conn = _make_db()
+    # Insert two 5-minute observations in the same hour (hour 21Z, no existing data)
+    conn.execute(
+        "INSERT INTO metar_observations (fetched_at, source, station, valid, lat, lon, tmpf) "
+        "VALUES ('t','nws-api','KDAL','2026-06-17T21:30:00+00:00',32,-96,85.0)"
+    )
+    conn.execute(
+        "INSERT INTO metar_observations (fetched_at, source, station, valid, lat, lon, tmpf) "
+        "VALUES ('t','nws-api','KDAL','2026-06-17T21:45:00+00:00',32,-96,86.0)"
+    )
+    conn.execute(
+        "INSERT INTO metar_observations (fetched_at, source, station, valid, lat, lon, tmpf) "
+        "VALUES ('t','aviationweather','KDAL','2026-06-17T21:53:00+00:00',32,-96,87.0)"
+    )
+    from dfw_temp_model.blending.blend import _load_metar_for_station
+    obs = _load_metar_for_station(conn, "KDAL")
+    # The 3 new observations should be present (no deduplication to hourly)
+    nws_count = len(obs[obs["valid_hour"] == "2026-06-17T21:00:00+00:00"])
+    assert nws_count == 3
+    assert "valid_hour" in obs.columns
+    assert "tmpf_obs" in obs.columns
+    conn.close()
