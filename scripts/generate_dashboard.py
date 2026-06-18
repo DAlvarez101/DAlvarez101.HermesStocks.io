@@ -73,7 +73,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <h1>DFW Live Weather Dashboard</h1>
-    <p>Updated at {updated_at} UTC · {updated_at_ct} CT<br>Sources: AviationWeather.gov METAR JSON, NOAA HRRR AWS Open Data</p>
+    <p>Updated at {updated_at} UTC · {updated_at_ct} CT<br>Sources: AviationWeather.gov METAR JSON, NOAA HRRR + NBM AWS Open Data</p>
 
     <div class="stats">
         <div class="card"><h3>Total METAR obs</h3><p>{total_rows}</p></div>
@@ -103,6 +103,9 @@ HTML_TEMPLATE = """
 
     <h2>HRRR 18-hour forecast ({TARGET_ICAO})</h2>
     {hrrr_chart}
+
+    <h2>NBM 18-hour forecast ({TARGET_ICAO})</h2>
+    {nbm_chart}
 
     <h2>Bias-Corrected Forecast ({TARGET_ICAO})</h2>
     {blended_chart}
@@ -276,6 +279,75 @@ def hrrr_forecast_chart(conn) -> str:
     return pyo.plot(fig, output_type="div", include_plotlyjs="cdn", config={"displayModeBar": False})
 
 
+def nbm_forecast_chart(conn) -> str:
+    """Interactive Plotly NBM 2 m temperature forecast chart for the target station.
+
+    Mirrors ``hrrr_forecast_chart`` but reads NBM rows (source='nbm-aws') and
+    uses NBM blue (#3b82f6) for the trace.
+    """
+    init_dt_str = latest_complete_hrrr_cycle(conn, TARGET_ICAO, required_hours=18, source="nbm-aws")
+    if init_dt_str is None:
+        return "<p>No NBM forecast data yet</p>"
+
+    df = hrrr_forecast_for_cycle(conn, TARGET_ICAO, init_dt_str, source="nbm-aws")
+    if df.empty or len(df) < 18:
+        return "<p>Complete NBM forecast cycle not available</p>"
+
+    df["valid_dt"] = pd.to_datetime(df["valid_dt"], utc=True)
+    df["init_dt"] = pd.to_datetime(df["init_dt"], utc=True)
+    df = df.sort_values("forecast_hour")
+    init_label = df["init_dt"].iloc[0].strftime("%Y-%m-%d %H:%M UTC")
+    init_ct_label = df["init_dt"].iloc[0].tz_convert(_CT).strftime("%I:%M %p CT")
+
+    df["valid_ct"] = df["valid_dt"].apply(lambda dt: dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT"))
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=df["valid_dt"],
+                y=df["tmpf"],
+                mode="lines+markers",
+                name="NBM 2m temp",
+                line={"color": "#3b82f6", "width": 2},
+                marker={"size": 6, "color": "#3b82f6"},
+                fill="tozeroy",
+                fillcolor="rgba(59, 130, 246, 0.15)",
+                hovertemplate=(
+                    "<b>%{x|%Y-%m-%d %H:%M UTC}</b><br>"
+                    "%{customdata}<br>"
+                    "Temp: %{y:.1f}°F<br>"
+                    f"Cycle: {init_label}<br>"
+                    "f%{text}<extra></extra>"
+                ),
+                text=df["forecast_hour"].astype(int),
+                customdata=df["valid_ct"],
+            )
+        ]
+    )
+
+    # Dynamic Y-axis with a little padding.
+    ymin, ymax = df["tmpf"].min(), df["tmpf"].max()
+    pad = max(1.0, (ymax - ymin) * 0.15)
+    y_min = ymin - pad
+    y_max = ymax + pad
+
+    fig.update_layout(
+        title=f"NBM 18-hour forecast — {TARGET_ICAO} 2 m temp<br><sup>Cycle {init_label} · {init_ct_label}</sup>",
+        xaxis_title="Valid time (UTC)",
+        yaxis_title="Temperature (°F)",
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        font={"color": "#e2e8f0"},
+        margin={"l": 60, "r": 30, "t": 50, "b": 60},
+        yaxis={"range": [y_min, y_max], "gridcolor": "#334155"},
+        xaxis={"gridcolor": "#334155"},
+        showlegend=False,
+        hovermode="x unified",
+    )
+
+    return pyo.plot(fig, output_type="div", include_plotlyjs=False, config={"displayModeBar": False})
+
+
 def blended_forecast_chart(conn) -> str:
     """Interactive Plotly chart: HRRR raw vs bias-corrected vs METAR observations.
 
@@ -284,15 +356,25 @@ def blended_forecast_chart(conn) -> str:
     visually align with the HRRR forecast at the same valid hour.
     """
     from dfw_temp_model.blending.blend import blended_forecast, list_recent_cycles
-    from dfw_temp_model.blending.providers import HRRRProvider
+    from dfw_temp_model.blending.providers import HRRRProvider, NBMProvider
 
-    provider = HRRRProvider()
-    cycles = list_recent_cycles(conn, TARGET_ICAO, provider, min_hours=18)
-    if not cycles:
-        return "<p>No complete HRRR forecast cycles available for blending</p>"
+    hrrr_provider = HRRRProvider()
+    nbm_provider = NBMProvider()
 
-    # Limit to the 5 most recent cycles for the dropdown
-    cycles = cycles[:5]
+    # Gather up to 3 most recent cycles from each provider, then combine into
+    # a single list of (provider, cycle_dt, model_label) tuples for iteration.
+    combined_cycles: list[tuple] = []
+    hrrr_cycles = list_recent_cycles(conn, TARGET_ICAO, hrrr_provider, min_hours=18)[:3]
+    for cycle_dt in hrrr_cycles:
+        combined_cycles.append((hrrr_provider, cycle_dt, "HRRR"))
+    nbm_cycles = list_recent_cycles(conn, TARGET_ICAO, nbm_provider, min_hours=18)[:3]
+    for cycle_dt in nbm_cycles:
+        combined_cycles.append((nbm_provider, cycle_dt, "NBM"))
+
+    if not combined_cycles:
+        return "<p>No complete forecast cycles available for blending</p>"
+
+    cycles = combined_cycles
 
     # Load ALL observations for overlay (both 5-minute NWS API and hourly AviationWeather)
     obs_df = pd.read_sql_query(
@@ -356,7 +438,9 @@ def blended_forecast_chart(conn) -> str:
     n_obs_traces = int(not obs_5min.empty) + int(not obs_hourly.empty)
     dropdown_buttons = []
 
-    for i, cycle_dt in enumerate(cycles):
+    for i, (provider, cycle_dt, model_label) in enumerate(cycles):
+        # Pick the raw-trace color based on the model: HRRR=orange, NBM=blue.
+        raw_color = "#f59e0b" if model_label == "HRRR" else "#3b82f6"
         blended = blended_forecast(conn, TARGET_ICAO, provider, init_dt=cycle_dt, trend_weight=0.15)
         if blended.empty:
             continue
@@ -371,16 +455,16 @@ def blended_forecast_chart(conn) -> str:
             lambda dt: dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT")
         )
 
-        # Raw HRRR
+        # Raw model forecast (HRRR orange or NBM blue)
         fig.add_trace(go.Scatter(
             x=blended["valid_dt"],
             y=blended["tmpf"],
             mode="lines+markers",
-            name=f"HRRR raw (cycle {i+1})",
-            line={"color": "#f59e0b", "width": 2, "dash": "dot"},
-            marker={"size": 5, "color": "#f59e0b"},
+            name=f"{model_label} raw (cycle {i+1})",
+            line={"color": raw_color, "width": 2, "dash": "dot"},
+            marker={"size": 5, "color": raw_color},
             hovertemplate=(
-                f"<b>HRRR raw</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>"
+                f"<b>{model_label} raw</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>"
                 f"%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>"
                 f"Cycle: {init_label}<extra></extra>"
             ),
