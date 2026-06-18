@@ -123,6 +123,11 @@ def test_end_to_end_smoke(tmp_path):
     assert target["residual_target"].notna().sum() >= 25
     # KDFW residual column (target) exists.
     assert "residual_target" in target.columns
-    # All neighbor columns exist.
-    for col in NEIGHBOR_ICAOS:
+    # KDFW is the observation source, not a neighbor — it appears as
+    # kdfw_obs / kdfw_fcst, not as a standalone KDFW column.
+    assert "kdfw_obs" in target.columns
+    assert "kdfw_fcst" in target.columns
+    # All neighbor columns exist (neighbors = all stations except KDFW and KDAL).
+    neighbor_icaos = [s.icao for s in STATIONS if s.icao not in ("KDFW", "KDAL")]
+    for col in neighbor_icaos:
         assert col in target.columns

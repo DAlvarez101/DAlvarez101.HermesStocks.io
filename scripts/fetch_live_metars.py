@@ -3,6 +3,11 @@ import argparse
 from pathlib import Path
 import sys
 
+# Make dfw_temp_model importable when this script is run directly.
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 from dfw_temp_model.config import CACHE_DIR, STATIONS
 from dfw_temp_model.data.aviationweather import fetch_aviationweather
 

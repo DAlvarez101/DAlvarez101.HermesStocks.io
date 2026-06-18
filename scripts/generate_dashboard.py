@@ -4,6 +4,7 @@ import base64
 import io
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import matplotlib
 matplotlib.use("Agg")
@@ -20,6 +21,28 @@ from dfw_temp_model.storage.obs_db import (
     latest_by_station,
     latest_complete_hrrr_cycle,
 )
+
+# Central Time zone (automatically handles CST/CDT).
+_CT = ZoneInfo("America/Chicago")
+
+
+def _utc_to_ct(utc_str: str, fmt: str = "%Y-%m-%d %H:%M UTC") -> str:
+    """Convert a UTC timestamp string to a short Central Time string.
+
+    Returns an empty string if parsing fails.
+    """
+    try:
+        dt = pd.to_datetime(utc_str, utc=True)
+    except Exception:
+        return ""
+    ct = dt.tz_convert(_CT)
+    return ct.strftime(fmt)
+
+
+def _dt_to_ct(dt, fmt: str = "%I:%M %p %Z") -> str:
+    """Convert a timezone-aware datetime to a Central Time string."""
+    ct = dt.tz_convert(_CT)
+    return ct.strftime(fmt)
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -50,13 +73,13 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <h1>DFW Live Weather Dashboard</h1>
-    <p>Updated at {updated_at} UTC · Sources: AviationWeather.gov METAR JSON, NOAA HRRR AWS Open Data</p>
+    <p>Updated at {updated_at} UTC · {updated_at_ct} CT<br>Sources: AviationWeather.gov METAR JSON, NOAA HRRR AWS Open Data</p>
 
     <div class="stats">
         <div class="card"><h3>Total METAR obs</h3><p>{total_rows}</p></div>
         <div class="card"><h3>Stations</h3><p>{station_count}</p></div>
-        <div class="card"><h3>First observation</h3><p>{first_obs}</p></div>
-        <div class="card"><h3>Latest observation</h3><p>{last_obs}</p></div>
+        <div class="card"><h3>First observation</h3><p>{first_obs}</p><small>{first_obs_ct}</small></div>
+        <div class="card"><h3>Latest observation</h3><p>{last_obs}</p><small>{last_obs_ct}</small></div>
     </div>
 
     <h2>METAR vs HRRR at {TARGET_ICAO} — current hour</h2>
@@ -64,12 +87,12 @@ HTML_TEMPLATE = """
         <div class="card">
             <h3>METAR observed</h3>
             <p>{metar_tmpf}°F</p>
-            <small>{metar_valid}</small>
+            <small>{metar_valid}<br>{metar_valid_ct}</small>
         </div>
         <div class="card">
             <h3>HRRR forecast</h3>
             <p>{hrrr_tmpf}°F</p>
-            <small>Cycle {hrrr_init} · f{hrrr_fxx:02d} · valid {hrrr_valid}</small>
+            <small>Cycle {hrrr_init}<br>f{hrrr_fxx:02d} · valid {hrrr_valid}<br>{hrrr_valid_ct}</small>
         </div>
         <div class="card">
             <h3>Difference</h3>
@@ -109,13 +132,19 @@ def summary_stats(conn) -> dict:
             "station_count": 0,
             "first_obs": "—",
             "last_obs": "—",
+            "first_obs_ct": "",
+            "last_obs_ct": "",
         }
     df["valid"] = pd.to_datetime(df["valid"], utc=True)
+    first_dt = df["valid"].min()
+    last_dt = df["valid"].max()
     return {
         "total_rows": len(df),
         "station_count": df["station"].nunique(),
-        "first_obs": df["valid"].min().strftime("%Y-%m-%d %H:%M UTC"),
-        "last_obs": df["valid"].max().strftime("%Y-%m-%d %H:%M UTC"),
+        "first_obs": first_dt.strftime("%Y-%m-%d %H:%M UTC"),
+        "last_obs": last_dt.strftime("%Y-%m-%d %H:%M UTC"),
+        "first_obs_ct": _dt_to_ct(first_dt, "%m/%d %I:%M %p CT"),
+        "last_obs_ct": _dt_to_ct(last_dt, "%m/%d %I:%M %p CT"),
     }
 
 
@@ -193,7 +222,9 @@ def hrrr_forecast_chart(conn) -> str:
     df["init_dt"] = pd.to_datetime(df["init_dt"], utc=True)
     df = df.sort_values("forecast_hour")
     init_label = df["init_dt"].iloc[0].strftime("%Y-%m-%d %H:%M UTC")
+    init_ct_label = df["init_dt"].iloc[0].tz_convert(_CT).strftime("%I:%M %p CT")
 
+    df["valid_ct"] = df["valid_dt"].apply(lambda dt: dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT"))
     fig = go.Figure(
         data=[
             go.Scatter(
@@ -207,11 +238,13 @@ def hrrr_forecast_chart(conn) -> str:
                 fillcolor="rgba(245, 158, 11, 0.15)",
                 hovertemplate=(
                     "<b>%{x|%Y-%m-%d %H:%M UTC}</b><br>"
+                    "%{customdata}<br>"
                     "Temp: %{y:.1f}°F<br>"
                     f"Cycle: {init_label}<br>"
                     "f%{text}<extra></extra>"
                 ),
                 text=df["forecast_hour"].astype(int),
+                customdata=df["valid_ct"],
             )
         ]
     )
@@ -223,7 +256,7 @@ def hrrr_forecast_chart(conn) -> str:
     y_max = ymax + pad
 
     fig.update_layout(
-        title=f"HRRR 18-hour forecast — {TARGET_ICAO} 2 m temp<br><sup>Cycle {init_label}</sup>",
+        title=f"HRRR 18-hour forecast — {TARGET_ICAO} 2 m temp<br><sup>Cycle {init_label} · {init_ct_label}</sup>",
         xaxis_title="Valid time (UTC)",
         yaxis_title="Temperature (°F)",
         template="plotly_dark",
@@ -258,10 +291,12 @@ def _metar_vs_hrrr(conn) -> dict:
         return {
             "metar_tmpf": "—",
             "metar_valid": "No METAR data",
+            "metar_valid_ct": "",
             "hrrr_tmpf": "—",
             "hrrr_init": "—",
             "hrrr_fxx": 0,
             "hrrr_valid": "No HRRR data",
+            "hrrr_valid_ct": "",
             "delta_text": "—",
         }
 
@@ -276,10 +311,12 @@ def _metar_vs_hrrr(conn) -> dict:
         return {
             "metar_tmpf": metar_tmpf,
             "metar_valid": metar_valid,
+            "metar_valid_ct": _utc_to_ct(metar_valid, "%m/%d %I:%M %p CT"),
             "hrrr_tmpf": "—",
             "hrrr_init": "—",
             "hrrr_fxx": 0,
             "hrrr_valid": "No HRRR data",
+            "hrrr_valid_ct": "",
             "delta_text": "—",
         }
 
@@ -300,10 +337,12 @@ def _metar_vs_hrrr(conn) -> dict:
     return {
         "metar_tmpf": metar_tmpf,
         "metar_valid": metar_valid,
+        "metar_valid_ct": _dt_to_ct(metar_dt, "%m/%d %I:%M %p CT"),
         "hrrr_tmpf": hrrr_tmpf,
         "hrrr_init": hrrr_init,
         "hrrr_fxx": hrrr_fxx,
         "hrrr_valid": hrrr_valid,
+        "hrrr_valid_ct": _dt_to_ct(hrrr["valid_dt"], "%m/%d %I:%M %p CT"),
         "delta_text": f"{delta:+0.1f}°F",
     }
 
@@ -328,12 +367,18 @@ def generate_dashboard(db_path: str, output_dir: str) -> Path:
         if col in display_latest.columns:
             display_latest[col] = display_latest[col].astype(float).round(2)
 
+    now_utc = datetime.now(timezone.utc)
+    now_ct = now_utc.astimezone(_CT)
+
     html = HTML_TEMPLATE.format(
-        updated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        updated_at=now_utc.strftime("%Y-%m-%d %H:%M:%S"),
+        updated_at_ct=now_ct.strftime("%I:%M %p"),
         total_rows=stats["total_rows"],
         station_count=stats["station_count"],
         first_obs=stats["first_obs"],
+        first_obs_ct=stats["first_obs_ct"],
         last_obs=stats["last_obs"],
+        last_obs_ct=stats["last_obs_ct"],
         latest_table=display_latest.to_html(index=False, classes="table", border=0),
         kdfw_chart=kdfw_temperature_chart(get_db(db_path)),
         hrrr_chart=hrrr_forecast_chart(get_db(db_path)),
