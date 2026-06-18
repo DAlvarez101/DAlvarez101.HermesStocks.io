@@ -4,6 +4,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Make dfw_temp_model importable when this script is run directly.
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 from dfw_temp_model.config import CACHE_DIR, STATIONS
 from dfw_temp_model.data.aviationweather import fetch_aviationweather
 from dfw_temp_model.data.hrrr import fetch_hrrr_forecast_range, fetch_latest_hrrr_2m_temp
