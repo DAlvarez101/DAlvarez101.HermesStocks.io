@@ -23,13 +23,13 @@ PYTHON="${PROJECT_DIR}/.venv/bin/python"
 # Ensure the project package is importable when running scripts directly.
 export PYTHONPATH="${PROJECT_DIR}${PYTHONPATH:+:$PYTHONPATH}"
 
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Ingesting observations + HRRR forecast ..."
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Ingesting observations + HRRR + NBM forecasts ..."
 # NWS API 5-minute observations (primary observation source, also runs every 5 min via separate cron)
 "$PYTHON" scripts/ingest_nws_observations.py --db "$DB_PATH" --limit 25
-# AviationWeather METAR + HRRR forecast (HRRR is hourly-only; AviationWeather serves as cross-validation)
+# AviationWeather METAR + HRRR + NBM forecasts (both models update hourly; AviationWeather serves as cross-validation)
 # To revert to AviationWeather-only: comment out the NWS line above and uncomment the line below
 # "$PYTHON" scripts/ingest_live_metars.py --db "$DB_PATH" --hours "$HOURS_BACK" --hrrr
-"$PYTHON" scripts/ingest_live_metars.py --db "$DB_PATH" --hours "$HOURS_BACK" --hrrr
+"$PYTHON" scripts/ingest_live_metars.py --db "$DB_PATH" --hours "$HOURS_BACK" --hrrr --nbm
 
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Generating dashboard ..."
 "$PYTHON" scripts/generate_dashboard.py --db "$DB_PATH" --output-dir "${PAGES_DIR}/${DASHBOARD_SUBDIR}"
