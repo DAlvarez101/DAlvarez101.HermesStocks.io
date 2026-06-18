@@ -104,6 +104,9 @@ HTML_TEMPLATE = """
     <h2>HRRR 18-hour forecast ({TARGET_ICAO})</h2>
     {hrrr_chart}
 
+    <h2>Bias-Corrected Forecast ({TARGET_ICAO})</h2>
+    {blended_chart}
+
     <h2>Latest readings per station</h2>
     {latest_table}
 
@@ -273,6 +276,178 @@ def hrrr_forecast_chart(conn) -> str:
     return pyo.plot(fig, output_type="div", include_plotlyjs="cdn", config={"displayModeBar": False})
 
 
+def blended_forecast_chart(conn) -> str:
+    """Interactive Plotly chart: HRRR raw vs bias-corrected vs METAR observations.
+
+    Includes a dropdown to switch between recent complete HRRR cycles.
+    METAR observations are overlaid at their floored-hour positions so they
+    visually align with the HRRR forecast at the same valid hour.
+    """
+    from dfw_temp_model.blending.blend import blended_forecast, list_recent_cycles
+    from dfw_temp_model.blending.providers import HRRRProvider
+
+    provider = HRRRProvider()
+    cycles = list_recent_cycles(conn, TARGET_ICAO, provider, min_hours=18)
+    if not cycles:
+        return "<p>No complete HRRR forecast cycles available for blending</p>"
+
+    # Limit to the 5 most recent cycles for the dropdown
+    cycles = cycles[:5]
+
+    # Load METAR observations for overlay
+    metar_df = pd.read_sql_query(
+        "SELECT valid, tmpf FROM metar_observations WHERE station = ? ORDER BY valid",
+        conn,
+        params=[TARGET_ICAO],
+    )
+    if not metar_df.empty:
+        metar_df["valid"] = pd.to_datetime(metar_df["valid"], utc=True)
+        metar_df["valid_hour"] = metar_df["valid"].dt.floor("h")
+        # Take the latest observation per hour
+        metar_hourly = metar_df.sort_values("valid").groupby("valid_hour").tail(1)
+        metar_hourly["ct_label"] = metar_hourly["valid"].apply(
+            lambda dt: dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT")
+        )
+    else:
+        metar_hourly = pd.DataFrame()
+
+    # Build one trace-set per cycle for the dropdown
+    fig = go.Figure()
+
+    # Add METAR observations (always visible, shared across all dropdown views)
+    if not metar_hourly.empty:
+        fig.add_trace(go.Scatter(
+            x=metar_hourly["valid_hour"],
+            y=metar_hourly["tmpf"],
+            mode="markers",
+            name="METAR observed",
+            marker={"size": 8, "color": "#38bdf8", "symbol": "circle"},
+            hovertemplate=(
+                "<b>METAR</b><br>"
+                "%{x|%Y-%m-%d %H:%M UTC}<br>"
+                "%{customdata}<br>"
+                "Temp: %{y:.1f}°F<extra></extra>"
+            ),
+            customdata=metar_hourly.get("ct_label", ""),
+            visible=True,
+        ))
+
+    # For each cycle, add: raw HRRR, corrected, uncertainty band
+    # We toggle visibility via dropdown buttons
+    n_metar = 1 if not metar_hourly.empty else 0
+    dropdown_buttons = []
+
+    for i, cycle_dt in enumerate(cycles):
+        blended = blended_forecast(conn, TARGET_ICAO, provider, init_dt=cycle_dt)
+        if blended.empty:
+            continue
+
+        blended["valid_dt"] = pd.to_datetime(blended["valid_dt"], utc=True)
+        blended = blended.sort_values("forecast_hour")
+        init_ts = pd.to_datetime(cycle_dt, utc=True)
+        init_label = init_ts.strftime("%Y-%m-%d %H:%M UTC")
+        init_ct = init_ts.tz_convert(_CT).strftime("%I:%M %p CT")
+
+        ct_labels = blended["valid_dt"].apply(
+            lambda dt: dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT")
+        )
+
+        # Raw HRRR
+        fig.add_trace(go.Scatter(
+            x=blended["valid_dt"],
+            y=blended["tmpf"],
+            mode="lines+markers",
+            name=f"HRRR raw (cycle {i+1})",
+            line={"color": "#f59e0b", "width": 2, "dash": "dot"},
+            marker={"size": 5, "color": "#f59e0b"},
+            hovertemplate=(
+                f"<b>HRRR raw</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>"
+                f"%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>"
+                f"Cycle: {init_label}<extra></extra>"
+            ),
+            customdata=ct_labels,
+            visible=(i == 0),
+        ))
+
+        # Uncertainty band
+        fig.add_trace(go.Scatter(
+            x=list(blended["valid_dt"]) + list(blended["valid_dt"])[::-1],
+            y=list(blended["uncertainty_high"]) + list(blended["uncertainty_low"])[::-1],
+            fill="toself",
+            fillcolor="rgba(34, 197, 94, 0.12)",
+            line={"color": "rgba(34, 197, 94, 0)", "width": 0},
+            name=f"Uncertainty (cycle {i+1})",
+            hoverinfo="skip",
+            visible=(i == 0),
+            showlegend=False,
+        ))
+
+        # Bias-corrected
+        bias_val = float(blended["bias_applied"].iloc[0]) if "bias_applied" in blended.columns else 0.0
+        fig.add_trace(go.Scatter(
+            x=blended["valid_dt"],
+            y=blended["tmpf_corrected"],
+            mode="lines+markers",
+            name=f"Corrected (cycle {i+1})",
+            line={"color": "#22c55e", "width": 2.5},
+            marker={"size": 6, "color": "#22c55e"},
+            hovertemplate=(
+                f"<b>Corrected</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>"
+                f"%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>"
+                f"Bias: {bias_val:+.1f}°F<br>"
+                f"Cycle: {init_label} · {init_ct}<extra></extra>"
+            ),
+            customdata=ct_labels,
+            visible=(i == 0),
+        ))
+
+        # Build visibility list for this dropdown option
+        n_traces_per_cycle = 3
+        visibility = [True] * n_metar  # METAR always on
+        for j in range(len(cycles)):
+            if j == i:
+                visibility.extend([True, True, True])
+            else:
+                visibility.extend([False, False, False])
+
+        dropdown_buttons.append(dict(
+            label=init_ts.strftime("%m/%d %H:00Z"),
+            method="update",
+            args=[{"visible": visibility}],
+        ))
+
+    # Set initial visibility to the first cycle
+    if dropdown_buttons:
+        fig.update_layout(
+            updatemenus=[dict(
+                buttons=dropdown_buttons,
+                direction="down",
+                showactive=True,
+                x=0.01,
+                xanchor="left",
+                y=1.15,
+                yanchor="top",
+            )],
+        )
+
+    fig.update_layout(
+        title=f"Bias-Corrected Forecast — {TARGET_ICAO}<br><sup>HRRR raw (orange) vs corrected (green) vs METAR (blue)</sup>",
+        xaxis_title="Valid time (UTC)",
+        yaxis_title="Temperature (°F)",
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        font={"color": "#e2e8f0"},
+        margin={"l": 60, "r": 30, "t": 60, "b": 60},
+        hovermode="x unified",
+        showlegend=True,
+        legend={"x": 0.01, "xanchor": "left", "y": 0.99, "yanchor": "top",
+                "bgcolor": "rgba(15,23,42,0.8)", "font": {"size": 10}},
+    )
+
+    return pyo.plot(fig, output_type="div", include_plotlyjs=False, config={"displayModeBar": False})
+
+
 def _metar_vs_hrrr(conn) -> dict:
     """Return current-hour METAR and the matching HRRR forecast for that hour."""
     metar = pd.read_sql_query(
@@ -382,6 +557,7 @@ def generate_dashboard(db_path: str, output_dir: str) -> Path:
         latest_table=display_latest.to_html(index=False, classes="table", border=0),
         kdfw_chart=kdfw_temperature_chart(get_db(db_path)),
         hrrr_chart=hrrr_forecast_chart(get_db(db_path)),
+        blended_chart=blended_forecast_chart(get_db(db_path)),
         hourly_chart=hourly_count_chart(get_db(db_path)),
         db_path=db_path,
         TARGET_ICAO=TARGET_ICAO,
