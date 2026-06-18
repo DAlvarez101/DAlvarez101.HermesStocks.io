@@ -63,11 +63,11 @@ class HRRRProvider:
             """
             SELECT init_dt, forecast_hour, valid_dt, tmpf, lat, lon, station, source
             FROM hrrr_forecasts
-            WHERE station = ? AND init_dt = ?
+            WHERE station = ? AND init_dt = ? AND source = ?
             ORDER BY forecast_hour ASC
             """,
             conn,
-            params=[station, init_dt],
+            params=[station, init_dt, self.SOURCE],
         )
         return df
 
@@ -79,19 +79,77 @@ class HRRRProvider:
     ) -> list[str]:
         """Return init_dt strings that have at least min_hours of frames.
 
-        Sorted newest-first. Only includes complete cycles.
+        Sorted newest-first. Only includes complete cycles for this source.
         """
         df = pd.read_sql_query(
             """
             SELECT init_dt, COUNT(*) AS n
             FROM hrrr_forecasts
-            WHERE station = ?
+            WHERE station = ? AND source = ?
             GROUP BY init_dt
             HAVING n >= ?
             ORDER BY init_dt DESC
             """,
             conn,
-            params=[station, min_hours],
+            params=[station, self.SOURCE, min_hours],
+        )
+        if df.empty:
+            return []
+        return df["init_dt"].tolist()
+
+
+class NBMProvider:
+    """Reads NBM forecasts from the SQLite ``hrrr_forecasts`` table.
+
+    NBM (National Blend of Models) forecasts are fetched from AWS S3 COG
+    files by ``dfw_temp_model.data.nbm`` and stored in the same table with
+    ``source = 'nbm-aws'``. This provider filters by that source tag so the
+    blending logic can use NBM independently of HRRR.
+    """
+
+    SOURCE = "nbm-aws"
+
+    def fetch_forecast(
+        self,
+        conn: sqlite3.Connection,
+        station: str,
+        init_dt: str,
+        forecast_hours: int = 18,
+    ) -> pd.DataFrame:
+        """Return all forecast hours for a given station and init cycle."""
+        df = pd.read_sql_query(
+            """
+            SELECT init_dt, forecast_hour, valid_dt, tmpf, lat, lon, station, source
+            FROM hrrr_forecasts
+            WHERE station = ? AND init_dt = ? AND source = ?
+            ORDER BY forecast_hour ASC
+            """,
+            conn,
+            params=[station, init_dt, self.SOURCE],
+        )
+        return df
+
+    def recent_cycles(
+        self,
+        conn: sqlite3.Connection,
+        station: str,
+        min_hours: int = 18,
+    ) -> list[str]:
+        """Return init_dt strings that have at least min_hours of frames.
+
+        Sorted newest-first. Only includes complete cycles for this source.
+        """
+        df = pd.read_sql_query(
+            """
+            SELECT init_dt, COUNT(*) AS n
+            FROM hrrr_forecasts
+            WHERE station = ? AND source = ?
+            GROUP BY init_dt
+            HAVING n >= ?
+            ORDER BY init_dt DESC
+            """,
+            conn,
+            params=[station, self.SOURCE, min_hours],
         )
         if df.empty:
             return []

@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS hrrr_forecasts (
     lat REAL,
     lon REAL,
     tmpf REAL,
-    UNIQUE(init_dt, forecast_hour, station)
+    UNIQUE(init_dt, forecast_hour, station, source)
 );
 
 CREATE INDEX IF NOT EXISTS idx_hrrr_station_valid
@@ -63,8 +63,32 @@ def get_db(db_path: str) -> sqlite3.Connection:
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
-    """Create the observation table and indexes if they do not exist."""
+    """Create the observation table and indexes if they do not exist.
+
+    Also migrates the hrrr_forecasts table from the old UNIQUE constraint
+    (init_dt, forecast_hour, station) to the new one that includes source,
+    so both HRRR and NBM rows can coexist for the same cycle+hour+station.
+    """
     conn.executescript(SCHEMA_SQL)
+
+    # Migration: if the table exists with the old UNIQUE constraint (without
+    # source), recreate it with the new constraint that includes source.
+    schema_info = conn.execute("SELECT sql FROM sqlite_master WHERE name='hrrr_forecasts'").fetchone()
+    if schema_info:
+        old_schema = schema_info[0]
+        if "UNIQUE(init_dt, forecast_hour, station)" in old_schema and "source" not in old_schema.split("UNIQUE")[1].split(")")[0]:
+            conn.executescript("""
+                ALTER TABLE hrrr_forecasts RENAME TO hrrr_forecasts_old;
+            """)
+            conn.executescript(SCHEMA_SQL)
+            conn.executescript("""
+                INSERT INTO hrrr_forecasts
+                (id, fetched_at, source, station, init_dt, forecast_hour, valid_dt, lat, lon, tmpf)
+                SELECT id, fetched_at, source, station, init_dt, forecast_hour, valid_dt, lat, lon, tmpf
+                FROM hrrr_forecasts_old;
+                DROP TABLE hrrr_forecasts_old;
+            """)
+
     conn.commit()
 
 
@@ -266,31 +290,64 @@ def hrrr_forecast_range(
 
 
 def latest_complete_hrrr_cycle(
-    conn: sqlite3.Connection, station: str, required_hours: int = 18
+    conn: sqlite3.Connection, station: str, required_hours: int = 18,
+    source: Optional[str] = None,
 ) -> Optional[str]:
-    """Return the latest init_dt (ISO string) that has >= required_hours frames."""
-    df = pd.read_sql_query(
-        """
-        SELECT init_dt, COUNT(*) AS n
-        FROM hrrr_forecasts
-        WHERE station = ?
-        GROUP BY init_dt
-        HAVING n >= ?
-        ORDER BY init_dt DESC
-        LIMIT 1
-        """,
-        conn,
-        params=[station, required_hours],
-    )
+    """Return the latest init_dt (ISO string) that has >= required_hours frames.
+
+    If source is given, only counts rows with that source value.
+    """
+    if source:
+        df = pd.read_sql_query(
+            """
+            SELECT init_dt, COUNT(*) AS n
+            FROM hrrr_forecasts
+            WHERE station = ? AND source = ?
+            GROUP BY init_dt
+            HAVING n >= ?
+            ORDER BY init_dt DESC
+            LIMIT 1
+            """,
+            conn,
+            params=[station, source, required_hours],
+        )
+    else:
+        df = pd.read_sql_query(
+            """
+            SELECT init_dt, COUNT(*) AS n
+            FROM hrrr_forecasts
+            WHERE station = ?
+            GROUP BY init_dt
+            HAVING n >= ?
+            ORDER BY init_dt DESC
+            LIMIT 1
+            """,
+            conn,
+            params=[station, required_hours],
+        )
     if df.empty:
         return None
     return str(df.iloc[0]["init_dt"])
 
 
 def hrrr_forecast_for_cycle(
-    conn: sqlite3.Connection, station: str, init_dt: str
+    conn: sqlite3.Connection, station: str, init_dt: str,
+    source: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Return every forecast hour for a given station and model cycle."""
+    """Return every forecast hour for a given station and model cycle.
+
+    If source is given, filters by that source value.
+    """
+    if source:
+        return pd.read_sql_query(
+            """
+            SELECT * FROM hrrr_forecasts
+            WHERE station = ? AND init_dt = ? AND source = ?
+            ORDER BY forecast_hour ASC
+            """,
+            conn,
+            params=[station, init_dt, source],
+        )
     return pd.read_sql_query(
         """
         SELECT * FROM hrrr_forecasts

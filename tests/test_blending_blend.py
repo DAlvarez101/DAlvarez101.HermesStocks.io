@@ -23,7 +23,7 @@ def _make_db():
             fetched_at TEXT, source TEXT, station TEXT,
             init_dt TEXT, forecast_hour INTEGER, valid_dt TEXT,
             lat REAL, lon REAL, tmpf REAL,
-            UNIQUE(init_dt, forecast_hour, station)
+            UNIQUE(init_dt, forecast_hour, station, source)
         );
     """)
 
@@ -82,12 +82,12 @@ def test_blended_forecast_no_overlap():
             id INTEGER PRIMARY KEY, fetched_at TEXT, source TEXT, station TEXT,
             init_dt TEXT, forecast_hour INTEGER, valid_dt TEXT,
             lat REAL, lon REAL, tmpf REAL,
-            UNIQUE(init_dt, forecast_hour, station)
+            UNIQUE(init_dt, forecast_hour, station, source)
         );
     """)
     for fh in range(1, 19):
         conn.execute(
-            "INSERT INTO hrrr_forecasts VALUES (NULL,'t','hrrr','KDAL','2026-06-17T18:00:00Z',?,?,0,0,80)",
+            "INSERT INTO hrrr_forecasts VALUES (NULL,'t','hrrr-aws','KDAL','2026-06-17T18:00:00Z',?,?,0,0,80)",
             (fh, f"2026-06-17T{(18+fh)%24:02d}:00:00Z"),
         )
     conn.commit()
