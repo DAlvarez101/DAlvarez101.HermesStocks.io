@@ -12,7 +12,6 @@ if str(_PROJECT_ROOT) not in sys.path:
 from dfw_temp_model.config import CACHE_DIR, STATIONS
 from dfw_temp_model.data.aviationweather import fetch_aviationweather
 from dfw_temp_model.data.hrrr import fetch_hrrr_forecast_range, fetch_latest_hrrr_2m_temp
-from dfw_temp_model.data.nbm import fetch_nbm_forecast_range
 from dfw_temp_model.storage.obs_db import get_db, insert_hrrr_forecasts, insert_observations
 
 
@@ -47,17 +46,6 @@ def main():
         default=18,
         help="Number of HRRR forecast hours to fetch (default 18)",
     )
-    parser.add_argument(
-        "--nbm",
-        action="store_true",
-        help="Also fetch NBM 2m temperature forecast for the next 18 hours",
-    )
-    parser.add_argument(
-        "--nbm-hours",
-        type=int,
-        default=18,
-        help="Number of NBM forecast hours to fetch (default 18)",
-    )
     args = parser.parse_args()
 
     fetched_at = datetime.now(timezone.utc).isoformat()
@@ -89,26 +77,6 @@ def main():
                 f"Inserted {hrrr_inserted} HRRR rows "
                 f"({len(hrrr_df)} fetched across {hrrr_df['forecast_hour'].nunique()} hours). "
                 f"Total HRRR rows: {hrrr_total}"
-            )
-
-    if args.nbm:
-        print(f"[{fetched_at}] Fetching NBM 2m temp (f01-f{args.nbm_hours:02d}) ...")
-        nbm_df = fetch_nbm_forecast_range(
-            STATIONS, max_forecast_hour=args.nbm_hours, lookback_hours=6
-        )
-        if nbm_df.empty:
-            print("No NBM forecast returned.", file=sys.stderr)
-        else:
-            nbm_inserted = insert_hrrr_forecasts(
-                conn, nbm_df, source="nbm-aws", fetched_at=fetched_at
-            )
-            nbm_total = conn.execute(
-                "SELECT COUNT(*) FROM hrrr_forecasts WHERE source = 'nbm-aws'"
-            ).fetchone()[0]
-            print(
-                f"Inserted {nbm_inserted} NBM rows "
-                f"({len(nbm_df)} fetched across {nbm_df['forecast_hour'].nunique()} hours). "
-                f"Total NBM rows: {nbm_total}"
             )
 
     conn.close()

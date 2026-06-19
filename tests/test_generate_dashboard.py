@@ -71,22 +71,6 @@ def populated_db(tmp_path):
     hrrr_df = pd.DataFrame(hrrr_rows)
     insert_hrrr_forecasts(conn, hrrr_df, source="hrrr-aws")
 
-    # NBM forecast rows (same cycle, different source so NBMProvider can find them)
-    nbm_rows = []
-    for fh in range(1, 19):
-        nbm_rows.append(
-            {
-                "station": "KDAL",
-                "init_dt": "2026-06-16T16:00:00+00:00",
-                "forecast_hour": fh,
-                "valid_dt": (pd.Timestamp("2026-06-16T16:00:00+00:00") + pd.Timedelta(hours=fh)).isoformat(),
-                "lat": 32.848,
-                "lon": -96.851,
-                "tmpf": 84.0 + (fh - 1) * 0.1,
-            }
-        )
-    nbm_df = pd.DataFrame(nbm_rows)
-    insert_hrrr_forecasts(conn, nbm_df, source="nbm-aws")
     conn.close()
     return str(db_path)
 
@@ -132,7 +116,6 @@ def test_generate_dashboard_creates_html(populated_db, tmp_path):
     assert "DFW Live Weather Dashboard" in html
     assert "KDAL" in html
     assert "METAR vs HRRR" in html
-    assert "NBM 18-hour forecast" in html
     assert "85.5°F" in html
     assert "+1.5°F" in html
     # Two matplotlib base64 chart images remain; HRRR is an interactive Plotly chart.
