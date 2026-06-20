@@ -9,6 +9,48 @@ from dfw_temp_model.storage.obs_db import get_db, hrrr_forecast_for_cycle, lates
 from dfw_temp_model.storage.obs_db import latest_by_station
 
 
+def sigma_for_forecast_hour(
+    forecast_hour: float,
+    base_sigma: float = 0.8,
+    growth_rate: float = 0.15,
+    max_sigma: float = 5.5,
+) -> float:
+    """Return forecast uncertainty (sigma) that grows with forecast hour.
+
+    Weather forecast error increases with lead time.  A fixed sigma
+    underestimates uncertainty at long horizons and overestimates it at
+    short ones.  This linear model approximates HRRR error growth:
+
+        sigma = base_sigma + growth_rate * forecast_hour
+
+    capped at *max_sigma* (the ~10-day ECMWF uncertainty).
+
+    Parameters
+    ----------
+    forecast_hour : float
+        Hours ahead the forecast is valid (e.g. 1 for the next hour,
+        18 for the last HRRR frame).
+    base_sigma : float
+        Sigma at hour 0 — the irreducible analysis/observation error.
+    growth_rate : float
+        Sigma increase per forecast hour, in degrees F.
+    max_sigma : float
+        Hard ceiling so absurdly long horizons don't explode.
+
+    Examples
+    --------
+    >>> round(sigma_for_forecast_hour(1), 2)
+    0.95
+    >>> round(sigma_for_forecast_hour(6), 2)
+    1.7
+    >>> round(sigma_for_forecast_hour(18), 2)
+    3.5
+    >>> round(sigma_for_forecast_hour(72), 2)
+    5.5
+    """
+    return min(base_sigma + growth_rate * forecast_hour, max_sigma)
+
+
 def probability_above_threshold(mean_temp: float, std: float, threshold: float) -> float:
     """Probability that the true high exceeds *threshold* under a Gaussian model."""
     # Lazy import scipy inside the function to avoid a deadlock when this module
@@ -29,9 +71,14 @@ def forecast_high_temp(
     db_path: str,
     market_question: str,
     predicted_residual: Optional[float] = None,
-    model_std: float = 2.0,
+    model_std: Optional[float] = None,
 ) -> dict:
-    """Return corrected forecast for the target station and market threshold."""
+    """Return corrected forecast for the target station and market threshold.
+
+    When *model_std* is None (default), sigma is computed from the mean
+    forecast hour of today's HRRR rows via :func:`sigma_for_forecast_hour`.
+    Pass an explicit float to override (used by tests).
+    """
     conn = get_db(db_path)
     try:
         latest = latest_by_station(conn)
@@ -57,12 +104,18 @@ def forecast_high_temp(
         if threshold is None:
             raise ValueError(f"Could not extract temperature threshold from: {market_question}")
 
+        # Horizon-dependent sigma: uncertainty grows with forecast lead time.
+        # Use the mean forecast hour of today's HRRR rows as the effective horizon.
+        mean_fhr = float(today_rows["forecast_hour"].mean()) if not today_rows.empty else 6.0
+        model_std = sigma_for_forecast_hour(mean_fhr) if model_std is None else model_std
+
         prob_yes = probability_above_threshold(corrected_high, model_std, threshold)
         return {
             "corrected_high": round(corrected_high, 2),
             "hrrr_raw_high": round(hrrr_raw_high, 2),
             "predicted_residual": predicted_residual,
-            "model_std": model_std,
+            "model_std": round(model_std, 4),
+            "forecast_hour": round(mean_fhr, 1),
             "threshold": threshold,
             "probability_yes": round(prob_yes, 4),
             "probability_no": round(1.0 - prob_yes, 4),

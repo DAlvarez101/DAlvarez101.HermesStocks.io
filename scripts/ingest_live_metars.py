@@ -46,25 +46,42 @@ def main():
         default=18,
         help="Number of HRRR forecast hours to fetch (default 18)",
     )
+    parser.add_argument(
+        "--hrrr-only",
+        action="store_true",
+        help="Skip METAR ingestion and only fetch HRRR (used by the :50 cron job)",
+    )
+    parser.add_argument(
+        "--hrrr-prefer-current",
+        action="store_true",
+        help="Try the current hour's HRRR cycle first before falling back "
+             "to the previous hour (for :50 ingestion when the run is complete)",
+    )
     args = parser.parse_args()
 
     fetched_at = datetime.now(timezone.utc).isoformat()
-    print(f"[{fetched_at}] Fetching live METARs ({args.hours}h back) ...")
 
-    df = fetch_aviationweather(STATIONS, hours=args.hours)
-    if df.empty:
-        print("No METARs returned; nothing to ingest.", file=sys.stderr)
-        sys.exit(1)
+    if not args.hrrr_only:
+        print(f"[{fetched_at}] Fetching live METARs ({args.hours}h back) ...")
+        df = fetch_aviationweather(STATIONS, hours=args.hours)
+        if df.empty:
+            print("No METARs returned; nothing to ingest.", file=sys.stderr)
+            sys.exit(1)
 
-    conn = get_db(args.db)
-    inserted = insert_observations(conn, df, source=args.source, fetched_at=fetched_at)
-    total = conn.execute("SELECT COUNT(*) FROM metar_observations").fetchone()[0]
-    print(f"Inserted {inserted} METAR rows. Total rows in database: {total}")
+        conn = get_db(args.db)
+        inserted = insert_observations(conn, df, source=args.source, fetched_at=fetched_at)
+        total = conn.execute("SELECT COUNT(*) FROM metar_observations").fetchone()[0]
+        print(f"Inserted {inserted} METAR rows. Total rows in database: {total}")
+    else:
+        conn = get_db(args.db)
 
-    if args.hrrr:
+    if args.hrrr or args.hrrr_only:
         print(f"[{fetched_at}] Fetching HRRR 2m temp (f01-f{args.hrrr_hours:02d}) ...")
         hrrr_df = fetch_hrrr_forecast_range(
-            STATIONS, max_forecast_hour=args.hrrr_hours, lookback_hours=6
+            STATIONS,
+            max_forecast_hour=args.hrrr_hours,
+            lookback_hours=6,
+            prefer_current_cycle=args.hrrr_prefer_current,
         )
         if hrrr_df.empty:
             print("No HRRR forecast returned.", file=sys.stderr)

@@ -35,6 +35,31 @@ def test_compute_rolling_bias_basic():
     assert result["n_matches"].iloc[-1] == 3
 
 
+def test_compute_rolling_bias_returns_detail_columns():
+    """compute_rolling_bias returns error_mean, obs_mean, fcst_mean for the bias table."""
+    obs = pd.DataFrame({
+        "valid_hour": pd.to_datetime([
+            "2026-06-17T18:00:00Z",
+            "2026-06-17T19:00:00Z",
+        ], utc=True),
+        "tmpf_obs": [89.0, 90.0],
+    })
+    fcst = pd.DataFrame({
+        "valid_hour": pd.to_datetime([
+            "2026-06-17T18:00:00Z",
+            "2026-06-17T19:00:00Z",
+        ], utc=True),
+        "tmpf_fcst": [88.0, 89.0],
+    })
+    result = compute_rolling_bias(obs, fcst, halflife_hours=6.0)
+    assert "error_mean" in result.columns
+    assert "obs_mean" in result.columns
+    assert "fcst_mean" in result.columns
+    assert result["error_mean"].iloc[0] == pytest.approx(1.0, abs=0.01)
+    assert result["obs_mean"].iloc[0] == pytest.approx(89.0, abs=0.01)
+    assert result["fcst_mean"].iloc[0] == pytest.approx(88.0, abs=0.01)
+
+
 def test_compute_rolling_bias_empty():
     """No overlaps -> empty result with correct columns."""
     obs = pd.DataFrame({"valid_hour": pd.to_datetime([], utc=True), "tmpf_obs": []})

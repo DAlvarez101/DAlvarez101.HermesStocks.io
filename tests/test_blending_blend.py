@@ -134,6 +134,24 @@ def test_blended_forecast_trend_weight_zero():
     conn.close()
 
 
+def test_blended_forecast_return_bias_trace():
+    """blended_forecast with return_bias_trace=True returns (result, bias_df)."""
+    conn = _make_db()
+    provider = HRRRProvider()
+    result, bias_df = blended_forecast(
+        conn, "KDAL", provider,
+        init_dt="2026-06-17T18:00:00+00:00",
+        return_bias_trace=True,
+    )
+    assert "tmpf_corrected" in result.columns
+    assert "bias" in bias_df.columns
+    assert "error_mean" in bias_df.columns
+    assert "obs_mean" in bias_df.columns
+    assert "fcst_mean" in bias_df.columns
+    assert len(bias_df) > 0
+    conn.close()
+
+
 def test_load_metar_uses_all_observations():
     """_load_metar_for_station should return all obs, not just one per hour."""
     conn = _make_db()

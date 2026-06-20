@@ -39,10 +39,15 @@ def compute_rolling_bias(
     pd.DataFrame
         Columns: ``valid_hour`` (datetime UTC), ``bias`` (float, the EWMA of
         obs - fcst), ``bias_std`` (float, rolling std for uncertainty),
-        ``n_matches`` (int, cumulative count of matched hours).
+        ``n_matches`` (int, cumulative count of matched hours),
+        ``error_mean`` (float, raw mean of obs-fcst at that hour before EWMA),
+        ``obs_mean`` (float, mean observed temp at that hour),
+        ``fcst_mean`` (float, mean forecast temp at that hour).
     """
+    empty_cols = ["valid_hour", "bias", "bias_std", "n_matches",
+                  "error_mean", "obs_mean", "fcst_mean"]
     if obs_df.empty or fcst_df.empty:
-        return pd.DataFrame(columns=["valid_hour", "bias", "bias_std", "n_matches"])
+        return pd.DataFrame(columns=empty_cols)
 
     obs = obs_df.copy()
     fcst = fcst_df.copy()
@@ -52,7 +57,7 @@ def compute_rolling_bias(
     # Merge on valid_hour (many-to-one if multiple cycles match the same obs hour)
     merged = obs.merge(fcst, on="valid_hour", how="inner")
     if merged.empty:
-        return pd.DataFrame(columns=["valid_hour", "bias", "bias_std", "n_matches"])
+        return pd.DataFrame(columns=empty_cols)
 
     # If multiple forecast cycles match the same obs hour, take the mean.
     merged["error"] = merged["tmpf_obs"] - merged["tmpf_fcst"]
@@ -60,6 +65,8 @@ def compute_rolling_bias(
         error_mean=("error", "mean"),
         error_std=("error", "std"),
         n=("error", "count"),
+        obs_mean=("tmpf_obs", "mean"),
+        fcst_mean=("tmpf_fcst", "mean"),
     ).reset_index()
     hourly = hourly.sort_values("valid_hour")
 
@@ -76,7 +83,8 @@ def compute_rolling_bias(
     hourly.loc[hourly["n"] == 1, "bias_std"] = 1.0
     hourly["n_matches"] = hourly["n"].cumsum()
 
-    return hourly[["valid_hour", "bias", "bias_std", "n_matches"]]
+    return hourly[["valid_hour", "bias", "bias_std", "n_matches",
+                   "error_mean", "obs_mean", "fcst_mean"]]
 
 
 def apply_bias_correction(

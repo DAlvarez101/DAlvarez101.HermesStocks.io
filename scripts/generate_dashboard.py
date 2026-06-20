@@ -11,6 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.io as pio
 import plotly.offline as pyo
 
 from dfw_temp_model.config import CACHE_DIR, TARGET_ICAO
@@ -69,6 +70,19 @@ HTML_TEMPLATE = """
         img {{ max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; border: 1px solid #334155; }}
         .footer {{ margin-top: 2rem; color: #64748b; font-size: 0.85rem; max-width: 900px; }}
         a {{ color: #38bdf8; }}
+        .cycle-selector-wrap {{ margin: 0.5rem 0 1rem 0; }}
+        select#cycle-selector {{ background: #1e293b; color: #e2e8f0; border: 1px solid #334155; padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-size: 0.95rem; }}
+        .stats-tiles {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin: 0.5rem 0 1rem 0; max-width: 900px; }}
+        .stat-tile {{ background: #1e293b; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #334155; }}
+        .stat-tile h3 {{ margin: 0 0 0.35rem 0; font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.03em; }}
+        .stat-tile p {{ margin: 0; font-size: 1.2rem; font-weight: 600; color: #38bdf8; }}
+        .stat-tile small {{ display: block; color: #64748b; margin-top: 0.2rem; font-size: 0.7rem; }}
+        .cycle-bias-table {{ margin: 0.5rem 0 1rem 0; max-width: 900px; }}
+        .cycle-bias-table summary {{ color: #7dd3fc; cursor: pointer; font-size: 0.85rem; margin: 0.5rem 0; }}
+        .bias-table {{ border-collapse: collapse; margin: 0.5rem 0; width: 100%; font-size: 0.82rem; }}
+        .bias-table th, .bias-table td {{ border: 1px solid #334155; padding: 0.35rem 0.5rem; text-align: left; }}
+        .bias-table th {{ background: #1e293b; color: #94a3b8; }}
+        .bias-table tr:nth-child(even) {{ background: #162032; }}
     </style>
 </head>
 <body>
@@ -276,12 +290,162 @@ def hrrr_forecast_chart(conn) -> str:
     return pyo.plot(fig, output_type="div", include_plotlyjs="cdn", config={"displayModeBar": False})
 
 
-def blended_forecast_chart(conn) -> str:
-    """Interactive Plotly chart: HRRR raw vs bias-corrected vs METAR observations.
+def _format_obs_time(obs_time) -> str:
+    """Format an observation timestamp for tile display."""
+    if obs_time is None:
+        return "—"
+    dt = pd.to_datetime(obs_time, utc=True)
+    return dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT")
 
-    Includes a dropdown to switch between recent complete HRRR cycles.
-    METAR observations are overlaid at their floored-hour positions so they
-    visually align with the HRRR forecast at the same valid hour.
+
+def _compute_cycle_stats(
+    blended: pd.DataFrame,
+    bias_df: pd.DataFrame,
+    latest_obs: pd.Series | None,
+    halflife_hours: float,
+    trend_weight: float,
+) -> dict:
+    """Extract per-cycle stat tile values from blended result and bias trace.
+
+    Returns a dict with bias_applied, trend_min/max, n_matched_pairs/hours,
+    uncertainty_plus, max_correction, latest_obs_tmpf/time,
+    corrected_at_obs_hour, raw_at_obs_hour, hindsight_error/raw_error,
+    halflife_hours, trend_weight.
+    """
+    bias_applied = float(blended["bias_applied"].iloc[0]) if len(blended) > 0 else 0.0
+    trend_min = float(blended["trend_correction"].min()) if "trend_correction" in blended.columns else 0.0
+    trend_max = float(blended["trend_correction"].max()) if "trend_correction" in blended.columns else 0.0
+
+    n_matched_pairs = int(bias_df["n_matches"].iloc[-1]) if not bias_df.empty else 0
+    n_matched_hours = len(bias_df) if not bias_df.empty else 0
+
+    if len(blended) > 0 and "uncertainty_high" in blended.columns:
+        unc_width = float(blended["uncertainty_high"].iloc[0] - blended["uncertainty_low"].iloc[0])
+        uncertainty_plus = unc_width / 2.0
+    else:
+        uncertainty_plus = 0.0
+
+    if "tmpf_trend_adjusted" in blended.columns and len(blended) > 0:
+        corrections = blended["tmpf_trend_adjusted"] - blended["tmpf"]
+        max_correction = float(corrections.min())
+    else:
+        max_correction = bias_applied
+
+    latest_obs_tmpf = None
+    latest_obs_time = None
+    corrected_at_obs_hour = None
+    raw_at_obs_hour = None
+    hindsight_error = None
+    hindsight_raw_error = None
+
+    if latest_obs is not None and len(blended) > 0:
+        latest_obs_tmpf = float(latest_obs["tmpf"])
+        latest_obs_time = latest_obs["valid"]
+        obs_hour = pd.to_datetime(latest_obs["valid"], utc=True).floor("h")
+        blended_copy = blended.copy()
+        blended_copy["valid_hour"] = pd.to_datetime(blended_copy["valid_dt"], utc=True).dt.floor("h")
+        match = blended_copy[blended_copy["valid_hour"] == obs_hour]
+        if not match.empty:
+            corrected_at_obs_hour = float(match["tmpf_corrected"].iloc[0])
+            raw_at_obs_hour = float(match["tmpf"].iloc[0])
+            hindsight_error = corrected_at_obs_hour - latest_obs_tmpf
+            hindsight_raw_error = raw_at_obs_hour - latest_obs_tmpf
+
+    return {
+        "bias_applied": bias_applied,
+        "trend_min": trend_min,
+        "trend_max": trend_max,
+        "n_matched_pairs": n_matched_pairs,
+        "n_matched_hours": n_matched_hours,
+        "uncertainty_plus": uncertainty_plus,
+        "max_correction": max_correction,
+        "latest_obs_tmpf": latest_obs_tmpf,
+        "latest_obs_time": latest_obs_time,
+        "corrected_at_obs_hour": corrected_at_obs_hour,
+        "raw_at_obs_hour": raw_at_obs_hour,
+        "hindsight_error": hindsight_error,
+        "hindsight_raw_error": hindsight_raw_error,
+        "halflife_hours": halflife_hours,
+        "trend_weight": trend_weight,
+    }
+
+
+def _build_stat_tiles_html(stats: dict, cycle_idx: int, visible: bool) -> str:
+    """Build the stat tile HTML block for one cycle."""
+    display = "block" if visible else "none"
+
+    bias_val = stats["bias_applied"]
+    bias_color = "#f87171" if bias_val < 0 else "#4ade80" if bias_val > 0 else "#94a3b8"
+
+    hindsight_err = stats.get("hindsight_error")
+    if hindsight_err is not None:
+        err_text = f"{hindsight_err:+.1f}°F"
+        err_color = "#4ade80" if abs(hindsight_err) < 2 else "#fbbf24" if abs(hindsight_err) < 4 else "#f87171"
+    else:
+        err_text = "—"
+        err_color = "#94a3b8"
+
+    raw_err = stats.get("hindsight_raw_error")
+    raw_err_text = f"{raw_err:+.1f}°F" if raw_err is not None else "—"
+
+    corrected_val = stats.get("corrected_at_obs_hour")
+    corrected_text = f"{corrected_val:.1f}°F" if corrected_val is not None else "—"
+
+    raw_val = stats.get("raw_at_obs_hour")
+    raw_text = f"{raw_val:.1f}°F" if raw_val is not None else "—"
+
+    latest_tmpf = stats.get("latest_obs_tmpf")
+    latest_text = f"{latest_tmpf:.1f}°F" if latest_tmpf is not None else "—"
+    latest_time = _format_obs_time(stats.get("latest_obs_time"))
+
+    return f"""<div class="cycle-stats" id="stats-{cycle_idx}" style="display:{display}">
+<div class="stats-tiles">
+  <div class="stat-tile" title="The constant offset added to every HRRR forecast hour. Computed as an exponentially-weighted moving average (EWMA) of (observed minus forecast) errors over recent matched hours. A negative value means HRRR has been running too warm, so we subtract that many degrees from the forecast."><h3>Bias Applied</h3><p style="color:{bias_color}">{bias_val:+.1f}°F</p><small>EWMA constant offset</small></div>
+  <div class="stat-tile" title="Extra per-hour adjustment based on how newer HRRR cycles are trending compared to older ones. If the model is cooling its forecasts cycle-over-cycle, we nudge the corrected forecast slightly cooler too. The range shows the min and max trend nudge across all 18 forecast hours."><h3>Trend Correction</h3><p>{stats['trend_min']:+.2f} to {stats['trend_max']:+.2f}°F</p><small>Per-hour range</small></div>
+  <div class="stat-tile" title="How many (observation, forecast) pairs were matched and averaged to compute the bias. More pairs across more hours means a more stable bias estimate. The pair count is cumulative across all matched hours."><h3>Matched Data</h3><p>{stats['n_matched_pairs']}</p><small>pairs across {stats['n_matched_hours']} hours</small></div>
+  <div class="stat-tile" title="The uncertainty band around the corrected forecast, shown as plus/minus degrees F. Derived from the spread of recent bias errors. The green shaded area on the chart spans corrected ± this value."><h3>Uncertainty ±</h3><p>±{stats['uncertainty_plus']:.1f}°F</p><small>1-sigma band</small></div>
+  <div class="stat-tile" title="The largest total adjustment applied to any single forecast hour (bias + trend combined). This is the biggest amount the corrected line differs from the raw HRRR line across all 18 hours."><h3>Max Correction</h3><p style="color:{bias_color}">{stats['max_correction']:+.1f}°F</p><small>Largest total adjustment</small></div>
+  <div class="stat-tile" title="The two parameters controlling correction strength. EWMA half-life is how fast old bias errors decay from memory (2h means an error 2 hours old has half the weight of the current one). Trend weight is what fraction of the model's cycle-over-cycle trend is applied (15% is a gentle nudge)."><h3>Config</h3><p>{stats['halflife_hours']:.0f}h / {int(stats['trend_weight']*100)}%</p><small>EWMA half-life / trend weight</small></div>
+  <div class="stat-tile" title="The most recent actual temperature observed at the station, from 5-minute NWS API or hourly METAR data. This is the ground truth the corrected forecast is trying to match."><h3>Latest Observed</h3><p>{latest_text}</p><small>{latest_time}</small></div>
+  <div class="stat-tile" title="What the bias-corrected forecast predicted for the hour of the latest observation, compared to what the raw HRRR forecast said for that same hour. Shows how much the correction moved the forecast at the time we can verify against."><h3>Corrected at Obs Hour</h3><p>{corrected_text}</p><small>Raw: {raw_text}</small></div>
+  <div class="stat-tile" title="How far off the corrected forecast was from the actual observed temperature at the latest observation hour. A small green number means the correction worked well. The raw error in parentheses shows how far off the uncorrected HRRR would have been. Compare the two to see if the correction helped."><h3>Hindsight Error</h3><p style="color:{err_color}">{err_text}</p><small>Corrected vs actual (raw: {raw_err_text})</small></div>
+</div>
+</div>"""
+
+
+def _build_bias_table_html(bias_df: pd.DataFrame, cycle_idx: int, visible: bool) -> str:
+    """Build a collapsible bias decomposition table for one cycle."""
+    display = "" if visible else "none"
+    if bias_df.empty:
+        return f'<details class="cycle-bias-table" id="bias-table-{cycle_idx}" style="display:{display}"><summary>Bias decomposition (no matched data)</summary></details>'
+
+    rows = []
+    for _, row in bias_df.iterrows():
+        ct_time = row["valid_hour"].tz_convert(_CT).strftime("%m/%d %H:%M CT")
+        rows.append(
+            f"<tr><td>{ct_time}</td><td>{row['obs_mean']:.1f}</td><td>{row['fcst_mean']:.1f}</td>"
+            f"<td>{row['error_mean']:+.1f}</td><td>{row['bias']:+.2f}</td>"
+            f"<td>{int(row['n_matches'])}</td></tr>"
+        )
+    rows_html = "\n".join(rows)
+
+    return f"""<details class="cycle-bias-table" id="bias-table-{cycle_idx}" style="display:{display}">
+<summary title="Click to expand a table showing how the bias was computed hour-by-hour. Each row is one matched hour where we have both a METAR observation and an HRRR forecast. The EWMA Bias column shows how the rolling bias estimate evolved over time — the final value is what gets applied as the constant correction.">Bias decomposition — per-hour matched errors and EWMA evolution</summary>
+<table class="bias-table">
+<thead><tr><th title="The hour (in Central Time) that the observation and forecast both apply to.">Valid Hour (CT)</th><th title="Average observed temperature at this hour, from 5-minute NWS API and hourly METAR data combined.">METAR Obs °F</th><th title="Average HRRR forecast temperature for this hour, across all recent cycles that cover it.">HRRR Fcst °F</th><th title="Observed minus forecast. Negative means HRRR was too warm; positive means too cool. This is the raw error before smoothing.">Error °F</th><th title="The exponentially-weighted moving average of errors up to this hour. This is the smoothed bias estimate — the final row's value is what gets applied as the constant correction to all forecast hours.">EWMA Bias °F</th><th title="Cumulative count of (observation, forecast) pairs matched so far, including all cycles that cover this hour.">Pairs</th></tr></thead>
+<tbody>
+{rows_html}
+</tbody>
+</table>
+</details>"""
+
+
+def blended_forecast_chart(conn) -> str:
+    """Interactive chart with per-cycle correction stat tiles and bias decomposition.
+
+    Uses an HTML <select> dropdown to switch between recent HRRR cycles.
+    The dropdown syncs stat tiles, bias table, and Plotly trace visibility.
+    All cycles' stats are pre-rendered as hidden HTML divs.
     """
     from dfw_temp_model.blending.blend import blended_forecast, list_recent_cycles
     from dfw_temp_model.blending.providers import HRRRProvider
@@ -290,11 +454,9 @@ def blended_forecast_chart(conn) -> str:
     cycles = list_recent_cycles(conn, TARGET_ICAO, provider, min_hours=18)
     if not cycles:
         return "<p>No complete HRRR forecast cycles available for blending</p>"
-
-    # Limit to the 5 most recent cycles for the dropdown
     cycles = cycles[:5]
 
-    # Load ALL observations for overlay (both 5-minute NWS API and hourly AviationWeather)
+    # Load ALL observations for overlay + latest obs for hindsight tiles
     obs_df = pd.read_sql_query(
         "SELECT valid, tmpf, source FROM metar_observations WHERE station = ? AND tmpf IS NOT NULL ORDER BY valid",
         conn,
@@ -305,60 +467,54 @@ def blended_forecast_chart(conn) -> str:
         obs_df["ct_label"] = obs_df["valid"].apply(
             lambda dt: dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT")
         )
-        # Split into 5-minute (nws-api) and hourly (aviationweather) for separate traces
         obs_5min = obs_df[obs_df["source"] == "nws-api"].copy()
         obs_hourly = obs_df[obs_df["source"] == "aviationweather"].copy()
+        latest_obs = obs_df.iloc[-1]
     else:
         obs_5min = pd.DataFrame()
         obs_hourly = pd.DataFrame()
+        latest_obs = None
 
-    # Build one trace-set per cycle for the dropdown
+    n_obs_traces = int(not obs_5min.empty) + int(not obs_hourly.empty)
+
     fig = go.Figure()
 
-    # Add 5-minute NWS API observations (smaller, lighter markers)
+    # Observation traces (always visible)
     if not obs_5min.empty:
         fig.add_trace(go.Scatter(
-            x=obs_5min["valid"],
-            y=obs_5min["tmpf"],
-            mode="markers",
+            x=obs_5min["valid"], y=obs_5min["tmpf"], mode="markers",
             name="5-min obs (NWS API)",
             marker={"size": 4, "color": "#818cf8", "symbol": "circle", "opacity": 0.6},
-            hovertemplate=(
-                "<b>5-min obs</b><br>"
-                "%{x|%Y-%m-%d %H:%M UTC}<br>"
-                "%{customdata}<br>"
-                "Temp: %{y:.1f}°F<extra></extra>"
-            ),
-            customdata=obs_5min.get("ct_label", ""),
-            visible=True,
+            hovertemplate="<b>5-min obs</b><br>%{x|%Y-%m-%d %H:%M UTC}<br>%{customdata}<br>Temp: %{y:.1f}°F<extra></extra>",
+            customdata=obs_5min.get("ct_label", ""), visible=True,
         ))
-
-    # Add hourly METAR observations (larger blue markers, as before)
     if not obs_hourly.empty:
         fig.add_trace(go.Scatter(
-            x=obs_hourly["valid"],
-            y=obs_hourly["tmpf"],
-            mode="markers",
+            x=obs_hourly["valid"], y=obs_hourly["tmpf"], mode="markers",
             name="METAR observed",
             marker={"size": 8, "color": "#38bdf8", "symbol": "circle"},
-            hovertemplate=(
-                "<b>METAR</b><br>"
-                "%{x|%Y-%m-%d %H:%M UTC}<br>"
-                "%{customdata}<br>"
-                "Temp: %{y:.1f}°F<extra></extra>"
-            ),
-            customdata=obs_hourly.get("ct_label", ""),
-            visible=True,
+            hovertemplate="<b>METAR</b><br>%{x|%Y-%m-%d %H:%M UTC}<br>%{customdata}<br>Temp: %{y:.1f}°F<extra></extra>",
+            customdata=obs_hourly.get("ct_label", ""), visible=True,
         ))
 
-    # For each cycle, add: raw HRRR, corrected, uncertainty band
-    # We toggle visibility via dropdown buttons
-    n_obs_traces = int(not obs_5min.empty) + int(not obs_hourly.empty)
-    dropdown_buttons = []
+    halflife = 2.0  # matches blended_forecast default
+    trend_w = 0.15
+
+    cycle_labels = []
+    all_tiles_html = []
+    all_table_html = []
+    visibility_arrays = []
 
     for i, cycle_dt in enumerate(cycles):
-        blended = blended_forecast(conn, TARGET_ICAO, provider, init_dt=cycle_dt, trend_weight=0.15)
+        blended, bias_df = blended_forecast(
+            conn, TARGET_ICAO, provider, init_dt=cycle_dt,
+            trend_weight=trend_w, return_bias_trace=True,
+        )
         if blended.empty:
+            visibility_arrays.append(None)
+            all_tiles_html.append("")
+            all_table_html.append("")
+            cycle_labels.append("")
             continue
 
         blended["valid_dt"] = pd.to_datetime(blended["valid_dt"], utc=True)
@@ -370,120 +526,110 @@ def blended_forecast_chart(conn) -> str:
         ct_labels = blended["valid_dt"].apply(
             lambda dt: dt.tz_convert(_CT).strftime("%m/%d %I:%M %p CT")
         )
+        bias_val = float(blended["bias_applied"].iloc[0])
 
-        # Raw HRRR
+        # Raw HRRR trace
         fig.add_trace(go.Scatter(
-            x=blended["valid_dt"],
-            y=blended["tmpf"],
-            mode="lines+markers",
+            x=blended["valid_dt"], y=blended["tmpf"], mode="lines+markers",
             name=f"HRRR raw (cycle {i+1})",
             line={"color": "#f59e0b", "width": 2, "dash": "dot"},
             marker={"size": 5, "color": "#f59e0b"},
-            hovertemplate=(
-                f"<b>HRRR raw</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>"
-                f"%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>"
-                f"Cycle: {init_label}<extra></extra>"
-            ),
-            customdata=ct_labels,
-            visible=(i == 0),
+            hovertemplate=f"<b>HRRR raw</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>Cycle: {init_label}<extra></extra>",
+            customdata=ct_labels, visible=(i == 0),
         ))
-
         # Uncertainty band
         fig.add_trace(go.Scatter(
             x=list(blended["valid_dt"]) + list(blended["valid_dt"])[::-1],
             y=list(blended["uncertainty_high"]) + list(blended["uncertainty_low"])[::-1],
-            fill="toself",
-            fillcolor="rgba(34, 197, 94, 0.12)",
+            fill="toself", fillcolor="rgba(34, 197, 94, 0.12)",
             line={"color": "rgba(34, 197, 94, 0)", "width": 0},
-            name=f"Uncertainty (cycle {i+1})",
-            hoverinfo="skip",
-            visible=(i == 0),
-            showlegend=False,
+            name=f"Uncertainty (cycle {i+1})", hoverinfo="skip",
+            visible=(i == 0), showlegend=False,
         ))
-
         # Bias-corrected
-        bias_val = float(blended["bias_applied"].iloc[0]) if "bias_applied" in blended.columns else 0.0
         fig.add_trace(go.Scatter(
-            x=blended["valid_dt"],
-            y=blended["tmpf_corrected"],
-            mode="lines+markers",
+            x=blended["valid_dt"], y=blended["tmpf_corrected"], mode="lines+markers",
             name=f"Corrected (cycle {i+1})",
             line={"color": "#22c55e", "width": 2.5},
             marker={"size": 6, "color": "#22c55e"},
-            hovertemplate=(
-                f"<b>Corrected</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>"
-                f"%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>"
-                f"Bias: {bias_val:+.1f}°F<br>"
-                f"Cycle: {init_label} · {init_ct}<extra></extra>"
-            ),
-            customdata=ct_labels,
-            visible=(i == 0),
+            hovertemplate=f"<b>Corrected</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>Bias: {bias_val:+.1f}°F<br>Cycle: {init_label} · {init_ct}<extra></extra>",
+            customdata=ct_labels, visible=(i == 0),
         ))
-
-        # Trend-adjusted (bias correction + model trend)
-        if "tmpf_trend_adjusted" in blended.columns:
+        # Trend-adjusted
+        has_trend = "tmpf_trend_adjusted" in blended.columns
+        if has_trend:
             fig.add_trace(go.Scatter(
-                x=blended["valid_dt"],
-                y=blended["tmpf_trend_adjusted"],
-                mode="lines+markers",
+                x=blended["valid_dt"], y=blended["tmpf_trend_adjusted"], mode="lines+markers",
                 name=f"Trend-adjusted (cycle {i+1})",
                 line={"color": "#a78bfa", "width": 2},
                 marker={"size": 5, "color": "#a78bfa"},
-                hovertemplate=(
-                    f"<b>Trend-adjusted</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>"
-                    f"%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>"
-                    f"Bias: {bias_val:+.1f}°F + trend<br>"
-                    f"Cycle: {init_label} · {init_ct}<extra></extra>"
-                ),
-                customdata=ct_labels,
-                visible=(i == 0),
+                hovertemplate=f"<b>Trend-adjusted</b><br>%{{x|%Y-%m-%d %H:%M UTC}}<br>%{{customdata}}<br>Temp: %{{y:.1f}}°F<br>Bias: {bias_val:+.1f}°F + trend<br>Cycle: {init_label} · {init_ct}<extra></extra>",
+                customdata=ct_labels, visible=(i == 0),
             ))
 
-        # Build visibility list for this dropdown option
-        n_traces_per_cycle = 4 if "tmpf_trend_adjusted" in blended.columns else 3
-        visibility = [True] * n_obs_traces  # observation traces always on
+        n_traces_per_cycle = 4 if has_trend else 3
+
+        # Build visibility array for this cycle
+        vis = [True] * n_obs_traces
         for j in range(len(cycles)):
             if j == i:
-                visibility.extend([True] * n_traces_per_cycle)
+                vis.extend([True] * n_traces_per_cycle)
             else:
-                visibility.extend([False] * n_traces_per_cycle)
+                vis.extend([False] * n_traces_per_cycle)
+        visibility_arrays.append(vis)
 
-        dropdown_buttons.append(dict(
-            label=init_ts.strftime("%m/%d %H:00Z"),
-            method="update",
-            args=[{"visible": visibility}],
-        ))
+        # Compute stats and build tiles + table
+        stats = _compute_cycle_stats(blended, bias_df, latest_obs, halflife, trend_w)
+        all_tiles_html.append(_build_stat_tiles_html(stats, cycle_idx=i, visible=(i == 0)))
+        all_table_html.append(_build_bias_table_html(bias_df, cycle_idx=i, visible=(i == 0)))
+        cycle_labels.append(init_ts.strftime("%m/%d %H:00Z"))
 
-    # Set initial visibility to the first cycle
-    if dropdown_buttons:
-        fig.update_layout(
-            updatemenus=[dict(
-                buttons=dropdown_buttons,
-                direction="down",
-                showactive=True,
-                x=0.01,
-                xanchor="left",
-                y=1.15,
-                yanchor="top",
-            )],
-        )
+    # Build dropdown options HTML
+    options_html = "\n".join(
+        f'<option value="{i}">{label}</option>'
+        for i, label in enumerate(cycle_labels) if label
+    )
 
     fig.update_layout(
         title=f"Blended Forecast — {TARGET_ICAO}<br><sup>raw (orange) · corrected (green) · trend (purple) · 5-min obs (indigo) · METAR (blue)</sup>",
-        xaxis_title="Valid time (UTC)",
-        yaxis_title="Temperature (°F)",
-        template="plotly_dark",
-        paper_bgcolor="#0f172a",
-        plot_bgcolor="#0f172a",
-        font={"color": "#e2e8f0"},
-        margin={"l": 60, "r": 30, "t": 60, "b": 60},
-        hovermode="x unified",
-        showlegend=True,
+        xaxis_title="Valid time (UTC)", yaxis_title="Temperature (°F)",
+        template="plotly_dark", paper_bgcolor="#0f172a", plot_bgcolor="#0f172a",
+        font={"color": "#e2e8f0"}, margin={"l": 60, "r": 30, "t": 60, "b": 60},
+        hovermode="x unified", showlegend=True,
         legend={"x": 0.01, "xanchor": "left", "y": 0.99, "yanchor": "top",
                 "bgcolor": "rgba(15,23,42,0.8)", "font": {"size": 10}},
     )
 
-    return pyo.plot(fig, output_type="div", include_plotlyjs=False, config={"displayModeBar": False})
+    plotly_div = pio.to_html(fig, include_plotlyjs=False,
+                             config={"displayModeBar": False}, div_id="blended-chart",
+                             full_html=False)
+
+    # Build JS with embedded visibility arrays
+    import json
+    vis_json = json.dumps(visibility_arrays)
+    js = f"""<script>
+var blendedVisibilityArrays = {vis_json};
+function switchBlendedCycle(idx) {{
+    idx = parseInt(idx);
+    document.querySelectorAll('.cycle-stats').forEach(el => el.style.display = 'none');
+    var statsEl = document.getElementById('stats-' + idx);
+    if (statsEl) statsEl.style.display = 'block';
+    document.querySelectorAll('.cycle-bias-table').forEach(el => el.style.display = 'none');
+    var tableEl = document.getElementById('bias-table-' + idx);
+    if (tableEl) tableEl.style.display = '';
+    var vis = blendedVisibilityArrays[idx];
+    if (vis) Plotly.restyle('blended-chart', {{visible: vis}});
+}}
+</script>"""
+
+    tiles_combined = "\n".join(t for t in all_tiles_html if t)
+    tables_combined = "\n".join(t for t in all_table_html if t)
+
+    return f"""<div class="cycle-selector-wrap"><label for="cycle-selector">HRRR cycle: </label><select id="cycle-selector" onchange="switchBlendedCycle(this.value)">{options_html}</select></div>
+{tiles_combined}
+{tables_combined}
+{plotly_div}
+{js}"""
 
 
 def _metar_vs_hrrr(conn) -> dict:

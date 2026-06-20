@@ -79,47 +79,72 @@ def _find_latest_cycle(
     return ts_now.floor("h"), False
 
 
-def _cfgrib_subset(grib_url: str, timeout: float = 60.0):
+def _cfgrib_subset(grib_url: str, timeout: float = 60.0, max_retries: int = 3):
     """Download only the 2 m temperature GRIB message and open with cfgrib.
 
     Parses the .idx file to find the byte range for the first
     ``TMP:2 m above ground`` message, requests that range, writes it to a temp
     file, and returns an xarray Dataset.
+
+    Retries up to *max_retries* times on truncated downloads (a common
+    transient issue when the HRRR cycle is still being published to AWS).
     """
-    idx_url = f"{grib_url}.idx"
-    idx_text = requests.get(idx_url, timeout=timeout).text
-
-    # idx lines: 1:0:d=2026061700:REFC:entire atmosphere:1 hour fcst:
-    # We want the specific 2 m temperature message.
-    pattern = re.compile(
-        r"^(\d+):(\d+):d=(\d+):TMP:2 m above ground:(.+)$",
-        re.MULTILINE | re.IGNORECASE,
-    )
-    matches = list(pattern.finditer(idx_text))
-    if not matches:
-        raise ValueError("Could not find TMP:2 m above ground in HRRR index")
-
-    first = matches[0]
-    start_byte = int(first.group(2))
-    end_byte = ""
-    if len(matches) > 1:
-        end_byte = int(matches[1].group(2)) - 1
-
-    headers = {"Range": f"bytes={start_byte}-{end_byte}"}
-    r = requests.get(grib_url, headers=headers, timeout=timeout)
-    r.raise_for_status()
-
-    tmp_path = Path(tempfile.gettempdir()) / "hrrr_t2m_subset.grib2"
-    tmp_path.write_bytes(r.content)
-
     import xarray as xr
 
-    ds = xr.open_dataset(
-        str(tmp_path),
-        engine="cfgrib",
-        backend_kwargs={"filter_by_keys": {"typeOfLevel": "heightAboveGround", "level": 2}},
-    )
-    return ds
+    idx_url = f"{grib_url}.idx"
+
+    # Use a unique temp file name to avoid race conditions when multiple
+    # HRRR fetches run concurrently (e.g. DFW and KLAX cron jobs at :50).
+    tmp_path = Path(tempfile.gettempdir()) / "hrrr_t2m_subset_dfw.grib2"
+
+    last_err = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            idx_text = requests.get(idx_url, timeout=timeout).text
+
+            # idx lines: 1:0:d=2026061700:REFC:entire atmosphere:1 hour fcst:
+            # We want the specific 2 m temperature message.
+            pattern = re.compile(
+                r"^(\d+):(\d+):d=(\d+):TMP:2 m above ground:(.+)$",
+                re.MULTILINE | re.IGNORECASE,
+            )
+            matches = list(pattern.finditer(idx_text))
+            if not matches:
+                raise ValueError("Could not find TMP:2 m above ground in HRRR index")
+
+            first = matches[0]
+            start_byte = int(first.group(2))
+            end_byte = ""
+            if len(matches) > 1:
+                end_byte = int(matches[1].group(2)) - 1
+
+            headers = {"Range": f"bytes={start_byte}-{end_byte}"}
+            r = requests.get(grib_url, headers=headers, timeout=timeout)
+            r.raise_for_status()
+
+            # Verify we got the expected number of bytes (catch truncated downloads)
+            expected = (end_byte - start_byte + 1) if end_byte != "" else None
+            if expected is not None and len(r.content) < expected:
+                raise IOError(
+                    f"Truncated GRIB download: got {len(r.content)} bytes, "
+                    f"expected {expected} (attempt {attempt}/{max_retries})"
+                )
+
+            tmp_path.write_bytes(r.content)
+
+            ds = xr.open_dataset(
+                str(tmp_path),
+                engine="cfgrib",
+                backend_kwargs={"filter_by_keys": {"typeOfLevel": "heightAboveGround", "level": 2}},
+            )
+            return ds
+        except (IOError, EOFError, OSError, ValueError) as e:
+            last_err = e
+            if attempt < max_retries:
+                time.sleep(2 * attempt)  # brief backoff: 2s, 4s
+                continue
+            raise
+    raise last_err  # unreachable, but satisfies type checkers
 
 
 def _nearest_temp(ds, lat: float, lon: float) -> float:
@@ -238,19 +263,31 @@ def fetch_hrrr_forecast_range(
     max_forecast_hour: int = 18,
     lookback_hours: int = 6,
     timeout: float = 90.0,
+    prefer_current_cycle: bool = False,
 ) -> pd.DataFrame:
     """Fetch a complete HRRR run (f01..max_forecast_hour) for each station.
 
     Walks back through recent cycles and uses the most recent one whose first
     max_forecast_hour frames are all published.  Every returned row then belongs
     to the same model run.
+
+    Parameters
+    ----------
+    prefer_current_cycle : bool
+        If True, try the current hour's cycle first (for :50 ingestion).
+        If the current run is not yet complete, falls back to the previous
+        hour just like the default behaviour.  Default False preserves the
+        original behaviour (skip current hour, start from previous hour).
     """
     now = pd.Timestamp(datetime.now(timezone.utc)).tz_convert("UTC")
-    # At cron time (five past the hour), the current hour's run is usually not
-    # fully published yet. Prefer the previous UTC hour's run.
+    # When prefer_current_cycle is False (default), the current hour's run is
+    # usually not fully published yet at cron time (:05), so we start from the
+    # previous UTC hour.  When True (for :50 ingestion), the current hour's run
+    # is typically complete, so we try it first and fall back if needed.
+    start_offset = 0 if prefer_current_cycle else 1
     init_dt = None
     for i in range(lookback_hours + 1):
-        candidate = (now - pd.Timedelta(hours=1 + i)).floor("h")
+        candidate = (now - pd.Timedelta(hours=start_offset + i)).floor("h")
         if _cycle_has_all_frames(candidate, max_forecast_hour, timeout=timeout):
             init_dt = candidate
             break

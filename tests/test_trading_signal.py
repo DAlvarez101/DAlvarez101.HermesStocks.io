@@ -1,5 +1,22 @@
 
-from dfw_temp_model.trading.signal import forecast_high_temp_simple, probability_above_threshold
+from dfw_temp_model.trading.signal import (
+    forecast_high_temp_simple,
+    probability_above_threshold,
+    sigma_for_forecast_hour,
+)
+
+
+def test_sigma_for_forecast_hour_grows_with_horizon():
+    assert sigma_for_forecast_hour(0) == 0.8
+    assert round(sigma_for_forecast_hour(1), 2) == 0.95
+    assert round(sigma_for_forecast_hour(6), 2) == 1.7
+    assert round(sigma_for_forecast_hour(18), 2) == 3.5
+    # Capped at max_sigma
+    assert sigma_for_forecast_hour(72) == 5.5
+    assert sigma_for_forecast_hour(999) == 5.5
+    # Monotonically increasing
+    for h in range(0, 72):
+        assert sigma_for_forecast_hour(h) <= sigma_for_forecast_hour(h + 1)
 
 
 def test_probability_above_threshold_with_gaussian():

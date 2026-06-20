@@ -21,7 +21,7 @@ def run_bot(cfg: TradingConfig, db_path: str) -> dict:
     if not market.active:
         return {"status": "MARKET_CLOSED", "market": market.slug}
 
-    signal = forecast_high_temp(db_path, market.question, predicted_residual=None, model_std=2.0)
+    signal = forecast_high_temp(db_path, market.question, predicted_residual=None)
 
     # In dry run, we don't need a real balance; use max_order_size_usdc as balance.
     balance_usdc = cfg.max_order_size_usdc

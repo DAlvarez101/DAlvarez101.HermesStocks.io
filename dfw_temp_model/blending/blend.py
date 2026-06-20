@@ -96,9 +96,10 @@ def blended_forecast(
     station: str,
     provider: ForecastProvider,
     init_dt: str | None = None,
-    halflife_hours: float = 6.0,
+    halflife_hours: float = 2.0,
     uncertainty_multiplier: float = 1.0,
     trend_weight: float = 0.0,
+    return_bias_trace: bool = False,
 ) -> pd.DataFrame:
     """Compute a bias-corrected forecast for a station.
 
@@ -114,7 +115,8 @@ def blended_forecast(
         The model cycle to correct. If None, uses the latest complete cycle.
     halflife_hours : float
         Half-life of the exponential bias decay. Recent observations
-        matter more.
+        matter more. Default 2.0 hours so the bias tracks rapid regime
+        changes (e.g. storm-driven temperature drops) quickly.
     uncertainty_multiplier : float
         Multiplier for the bias std to form the uncertainty band.
     trend_weight : float
@@ -129,6 +131,11 @@ def blended_forecast(
         (raw), ``tmpf_corrected``, ``uncertainty_low``, ``uncertainty_high``,
         ``forecast_hour``, ``bias_applied``, ``trend_correction``,
         ``tmpf_trend_adjusted``, ``init_dt``.
+
+        If ``return_bias_trace`` is True, returns a tuple ``(result, bias_df)``
+        where ``bias_df`` is the per-hour bias trace from ``compute_rolling_bias``
+        (includes ``valid_hour``, ``bias``, ``bias_std``, ``n_matches``,
+        ``error_mean``, ``obs_mean``, ``fcst_mean``).
     """
     # Determine which cycle to correct
     if init_dt is None:
@@ -181,6 +188,8 @@ def blended_forecast(
         result["trend_correction"] = 0.0
         result["tmpf_trend_adjusted"] = result["tmpf_corrected"]
 
+    if return_bias_trace:
+        return result, bias_df
     return result
 
 
