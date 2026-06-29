@@ -27,10 +27,10 @@ def _make_db():
         );
     """)
 
-    # METAR observations for KDAL: hours 12-20Z
+    # METAR observations for KDFW: hours 12-20Z
     for h in range(12, 21):
         conn.execute(
-            "INSERT INTO metar_observations (fetched_at, source, station, valid, lat, lon, tmpf) VALUES ('t','aviationweather','KDAL',?,32,-96,?)",
+            "INSERT INTO metar_observations (fetched_at, source, station, valid, lat, lon, tmpf) VALUES ('t','aviationweather','KDFW',?,32.9,-97.0,?)",
             (f"2026-06-17T{h:02d}:53:00+00:00", 80.0 + h),
         )
 
@@ -38,7 +38,7 @@ def _make_db():
     for fh in range(1, 19):
         valid_h = (18 + fh) % 24
         conn.execute(
-            "INSERT INTO hrrr_forecasts (fetched_at, source, station, init_dt, forecast_hour, valid_dt, lat, lon, tmpf) VALUES ('t','hrrr-aws','KDAL','2026-06-17T18:00:00+00:00',?,?,32,-96,?)",
+            "INSERT INTO hrrr_forecasts (fetched_at, source, station, init_dt, forecast_hour, valid_dt, lat, lon, tmpf) VALUES ('t','wethr','KDFW','2026-06-17T18:00:00+00:00',?,?,32.9,-97.0,?)",
             (fh, f"2026-06-17T{valid_h:02d}:00:00+00:00", 79.0 + fh),
         )
     conn.commit()
@@ -49,7 +49,7 @@ def test_blended_forecast_returns_correct_columns():
     """blended_forecast returns a DataFrame with all expected columns."""
     conn = _make_db()
     provider = HRRRProvider()
-    result = blended_forecast(conn, "KDAL", provider, init_dt="2026-06-17T18:00:00+00:00")
+    result = blended_forecast(conn, "KDFW", provider, init_dt="2026-06-17T18:00:00+00:00")
     assert "tmpf" in result.columns
     assert "tmpf_corrected" in result.columns
     assert "uncertainty_low" in result.columns
@@ -63,7 +63,7 @@ def test_blended_forecast_bias_is_nonzero():
     """With real METAR-HRRR overlap, the bias should be non-zero."""
     conn = _make_db()
     provider = HRRRProvider()
-    result = blended_forecast(conn, "KDAL", provider, init_dt="2026-06-17T18:00:00+00:00")
+    result = blended_forecast(conn, "KDFW", provider, init_dt="2026-06-17T18:00:00+00:00")
     assert result["tmpf_corrected"].iloc[0] > result["tmpf"].iloc[0]
     conn.close()
 
@@ -87,12 +87,12 @@ def test_blended_forecast_no_overlap():
     """)
     for fh in range(1, 19):
         conn.execute(
-            "INSERT INTO hrrr_forecasts VALUES (NULL,'t','hrrr-aws','KDAL','2026-06-17T18:00:00Z',?,?,0,0,80)",
+            "INSERT INTO hrrr_forecasts VALUES (NULL,'t','wethr','KDFW','2026-06-17T18:00:00Z',?,?,0,0,80)",
             (fh, f"2026-06-17T{(18+fh)%24:02d}:00:00Z"),
         )
     conn.commit()
     provider = HRRRProvider()
-    result = blended_forecast(conn, "KDAL", provider, init_dt="2026-06-17T18:00:00Z")
+    result = blended_forecast(conn, "KDFW", provider, init_dt="2026-06-17T18:00:00Z")
     assert result["tmpf_corrected"].iloc[0] == pytest.approx(80.0, abs=0.01)
     conn.close()
 
@@ -101,7 +101,7 @@ def test_list_recent_cycles():
     """list_recent_cycles returns available complete cycles."""
     conn = _make_db()
     provider = HRRRProvider()
-    cycles = list_recent_cycles(conn, "KDAL", provider, min_hours=18)
+    cycles = list_recent_cycles(conn, "KDFW", provider, min_hours=18)
     assert len(cycles) >= 1
     assert "2026-06-17T18:00:00+00:00" in cycles
     conn.close()
@@ -112,7 +112,7 @@ def test_blended_forecast_has_trend_correction():
     conn = _make_db()
     provider = HRRRProvider()
     result = blended_forecast(
-        conn, "KDAL", provider,
+        conn, "KDFW", provider,
         init_dt="2026-06-17T18:00:00+00:00",
         trend_weight=0.15,
     )
@@ -126,7 +126,7 @@ def test_blended_forecast_trend_weight_zero():
     conn = _make_db()
     provider = HRRRProvider()
     result = blended_forecast(
-        conn, "KDAL", provider,
+        conn, "KDFW", provider,
         init_dt="2026-06-17T18:00:00+00:00",
         trend_weight=0.0,
     )
@@ -139,7 +139,7 @@ def test_blended_forecast_return_bias_trace():
     conn = _make_db()
     provider = HRRRProvider()
     result, bias_df = blended_forecast(
-        conn, "KDAL", provider,
+        conn, "KDFW", provider,
         init_dt="2026-06-17T18:00:00+00:00",
         return_bias_trace=True,
     )
@@ -158,18 +158,18 @@ def test_load_metar_uses_all_observations():
     # Insert two 5-minute observations in the same hour (hour 21Z, no existing data)
     conn.execute(
         "INSERT INTO metar_observations (fetched_at, source, station, valid, lat, lon, tmpf) "
-        "VALUES ('t','nws-api','KDAL','2026-06-17T21:30:00+00:00',32,-96,85.0)"
+        "VALUES ('t','nws-api','KDFW','2026-06-17T21:30:00+00:00',32.9,-97.0,85.0)"
     )
     conn.execute(
         "INSERT INTO metar_observations (fetched_at, source, station, valid, lat, lon, tmpf) "
-        "VALUES ('t','nws-api','KDAL','2026-06-17T21:45:00+00:00',32,-96,86.0)"
+        "VALUES ('t','nws-api','KDFW','2026-06-17T21:45:00+00:00',32.9,-97.0,86.0)"
     )
     conn.execute(
         "INSERT INTO metar_observations (fetched_at, source, station, valid, lat, lon, tmpf) "
-        "VALUES ('t','aviationweather','KDAL','2026-06-17T21:53:00+00:00',32,-96,87.0)"
+        "VALUES ('t','aviationweather','KDFW','2026-06-17T21:53:00+00:00',32.9,-97.0,87.0)"
     )
     from dfw_temp_model.blending.blend import _load_metar_for_station
-    obs = _load_metar_for_station(conn, "KDAL")
+    obs = _load_metar_for_station(conn, "KDFW")
     # The 3 new observations should be present (no deduplication to hourly)
     nws_count = len(obs[obs["valid_hour"] == "2026-06-17T21:00:00+00:00"])
     assert nws_count == 3

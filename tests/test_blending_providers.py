@@ -33,16 +33,16 @@ def test_hrrr_provider_returns_forecast():
     conn.executemany(
         "INSERT INTO hrrr_forecasts VALUES (?,?,?,?,?,?,?,?,?,?)",
         [
-            (1, "2026-01-01T00:00:00Z", "hrrr-aws", "KDAL",
-             "2026-01-01T00:00:00Z", 1, "2026-01-01T01:00:00Z", 32.0, -96.0, 80.0),
-            (2, "2026-01-01T00:00:00Z", "hrrr-aws", "KDAL",
-             "2026-01-01T00:00:00Z", 2, "2026-01-01T02:00:00Z", 32.0, -96.0, 82.0),
+            (1, "2026-01-01T00:00:00Z", "wethr", "KDFW",
+             "2026-01-01T00:00:00Z", 1, "2026-01-01T01:00:00Z", 32.0, -97.0, 80.0),
+            (2, "2026-01-01T00:00:00Z", "wethr", "KDFW",
+             "2026-01-01T00:00:00Z", 2, "2026-01-01T02:00:00Z", 32.0, -97.0, 82.0),
         ],
     )
     conn.commit()
 
     provider = HRRRProvider()
-    df = provider.fetch_forecast(conn, "KDAL", "2026-01-01T00:00:00Z", forecast_hours=2)
+    df = provider.fetch_forecast(conn, "KDFW", "2026-01-01T00:00:00Z", forecast_hours=2)
     assert len(df) == 2
     assert "valid_dt" in df.columns
     assert "tmpf" in df.columns
@@ -65,18 +65,17 @@ def test_hrrr_provider_recent_cycles():
     for fh in range(1, 19):
         conn.execute(
             "INSERT INTO hrrr_forecasts VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (None, "t", "hrrr-aws", "KDAL", "2026-01-01T12:00:00Z", fh, "t", 0, 0, 80),
+            (None, "t", "wethr", "KDFW", "2026-01-01T12:00:00Z", fh, "t", 0, 0, 80),
         )
     for fh in range(1, 9):
         conn.execute(
             "INSERT INTO hrrr_forecasts VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (None, "t", "hrrr-aws", "KDAL", "2026-01-01T06:00:00Z", fh, "t", 0, 0, 80),
+            (None, "t", "wethr", "KDFW", "2026-01-01T06:00:00Z", fh, "t", 0, 0, 80),
         )
     conn.commit()
 
     provider = HRRRProvider()
-    cycles = provider.recent_cycles(conn, "KDAL", min_hours=18)
+    cycles = provider.recent_cycles(conn, "KDFW", min_hours=18)
     assert "2026-01-01T12:00:00Z" in cycles
     assert "2026-01-01T06:00:00Z" not in cycles
     conn.close()
-

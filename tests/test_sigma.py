@@ -186,3 +186,14 @@ def test_shrink_sigma_caps_at_24_hours():
     result_24 = shrink_sigma_for_observations(sigma, hours_elapsed=24.0, shrink_rate=0.5)
     result_30 = shrink_sigma_for_observations(sigma, hours_elapsed=30.0, shrink_rate=0.5)
     assert result_24 == pytest.approx(result_30)
+
+
+def test_weight_fallback_does_not_equal_verified_weight():
+    """When a model has no MAE weight (w=0), its fallback weight should be
+    less than 1.0 so it doesn't dilute verified models equally."""
+    from dfw_temp_model.blending.multi import UNVERIFIED_FALLBACK_WEIGHT
+    assert UNVERIFIED_FALLBACK_WEIGHT < 1.0, (
+        f"Fallback weight should be < 1.0 to avoid diluting verified models, "
+        f"got {UNVERIFIED_FALLBACK_WEIGHT}"
+    )
+    assert UNVERIFIED_FALLBACK_WEIGHT > 0.0, "Should still contribute"

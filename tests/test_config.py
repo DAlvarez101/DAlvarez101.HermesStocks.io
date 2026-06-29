@@ -6,10 +6,10 @@ def test_station_count():
 
 
 def test_target_icao():
-    assert TARGET_ICAO == "KDAL"
+    assert TARGET_ICAO == "KDFW"
 
 
-def test_exactly_one_target_and_is_kdal():
+def test_exactly_one_target_and_is_kdfw():
     targets = [s for s in STATIONS if s.role == "target"]
     assert len(targets) == 1
-    assert targets[0].icao == "KDAL"
+    assert targets[0].icao == "KDFW"

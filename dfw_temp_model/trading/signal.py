@@ -7,48 +7,7 @@ import pandas as pd
 from dfw_temp_model.config import TARGET_ICAO
 from dfw_temp_model.storage.obs_db import get_db, hrrr_forecast_for_cycle, latest_complete_hrrr_cycle
 from dfw_temp_model.storage.obs_db import latest_by_station
-
-
-def sigma_for_forecast_hour(
-    forecast_hour: float,
-    base_sigma: float = 0.8,
-    growth_rate: float = 0.15,
-    max_sigma: float = 5.5,
-) -> float:
-    """Return forecast uncertainty (sigma) that grows with forecast hour.
-
-    Weather forecast error increases with lead time.  A fixed sigma
-    underestimates uncertainty at long horizons and overestimates it at
-    short ones.  This linear model approximates HRRR error growth:
-
-        sigma = base_sigma + growth_rate * forecast_hour
-
-    capped at *max_sigma* (the ~10-day ECMWF uncertainty).
-
-    Parameters
-    ----------
-    forecast_hour : float
-        Hours ahead the forecast is valid (e.g. 1 for the next hour,
-        18 for the last HRRR frame).
-    base_sigma : float
-        Sigma at hour 0 — the irreducible analysis/observation error.
-    growth_rate : float
-        Sigma increase per forecast hour, in degrees F.
-    max_sigma : float
-        Hard ceiling so absurdly long horizons don't explode.
-
-    Examples
-    --------
-    >>> round(sigma_for_forecast_hour(1), 2)
-    0.95
-    >>> round(sigma_for_forecast_hour(6), 2)
-    1.7
-    >>> round(sigma_for_forecast_hour(18), 2)
-    3.5
-    >>> round(sigma_for_forecast_hour(72), 2)
-    5.5
-    """
-    return min(base_sigma + growth_rate * forecast_hour, max_sigma)
+from dfw_temp_model.blending.sigma import sigma_for_forecast_hour
 
 
 def probability_above_threshold(mean_temp: float, std: float, threshold: float) -> float:
