@@ -1,0 +1,195 @@
+# Kalshi Ladder Trade Signals
+
+## What It Does
+
+The Ladder Trade Signals section scans live Kalshi temperature markets and
+identifies **clusters of adjacent temperature buckets** where spreading $1
+across the cluster is likely to be profitable.
+
+Instead of betting on one specific temperature bucket, a "ladder" buys YES
+shares on 2–4 adjacent buckets. If the actual temperature lands in **any** of
+them, one bucket pays out $1 per share while the others expire worthless.
+You don't need to guess the exact number — you just need the temperature to
+land somewhere in your cluster.
+
+This is a display-only tool. It does not execute trades. It shows you where
+the model and the market disagree so you can decide for yourself.
+
+
+## The Core Idea
+
+Weather forecast models produce a point forecast (e.g. "the high will be
+96°F"). But that point is often off by 1–3°F, which can push the actual
+temperature into a neighboring bucket. Kalshi temperature markets are sliced
+into 2°F-wide buckets (e.g. 95–96°F, 97–98°F, 99–100°F).
+
+If you buy the single bucket the model points to and the temperature lands one
+bucket over, you lose everything. A ladder hedges this by buying several
+adjacent buckets at once — so a small forecast error doesn't sink the trade.
+
+
+## How the Math Works
+
+All calculations are based on a **$1 budget**. You can scale up by
+multiplying (a $10 budget = 10× the shares, same ROI).
+
+### Step 1: Pick a cluster
+
+Select 2–4 adjacent buckets from the Kalshi market. For example:
+
+| Bucket | Ask Price (per share) |
+|--------|----------------------|
+| 95°F or below | $0.15 |
+| 96–97°F | $0.30 |
+| 98–99°F | $0.10 |
+
+### Step 2: Calculate the total cost
+
+```
+total_ask = sum of all ask prices in the cluster
+          = $0.15 + $0.30 + $0.10
+          = $0.55
+```
+
+This is what it costs to buy one share of YES on every bucket in the cluster.
+
+### Step 3: Calculate shares and payout
+
+With a $1 budget, you buy equal shares of each bucket:
+
+```
+shares_per_bucket = $1 / total_ask
+                   = $1 / $0.55
+                   = 1.82 shares per bucket
+```
+
+If **any** bucket in the cluster wins (the temperature lands in it), that
+bucket pays out $1 per share:
+
+```
+payout_if_any_wins = shares_per_bucket × $1
+                    = $1 / total_ask
+                    = $1.82
+```
+
+This payout is the same regardless of which bucket wins — that's the key
+property of equal-share allocation.
+
+### Step 4: Calculate profit
+
+```
+guaranteed_profit = payout_if_any_wins - $1
+                  = $1.82 - $1
+                  = $0.82
+```
+
+If the total cost is under $1, this profit is **guaranteed** — you make money
+no matter which bucket in the cluster wins.
+
+### Step 5: Factor in the model's probability
+
+The model gives a probability for each bucket. Sum them to get the chance
+that the temperature lands in **any** bucket in the cluster:
+
+```
+model_p_win = P(95°F or below) + P(96–97°F) + P(98–99°F)
+            = 0.20 + 0.35 + 0.10
+            = 0.65 (65%)
+```
+
+Then expected profit:
+
+```
+expected_payout  = model_p_win × payout_if_any_wins
+                = 0.65 × $1.82
+                = $1.18
+
+expected_profit = expected_payout - $1
+                = $1.18 - $1
+                = $0.18
+
+roi = expected_profit / $1
+    = 18%
+```
+
+
+## What the Dashboard Shows
+
+Each row in the ladder table is one cluster of adjacent buckets:
+
+| Column | Meaning |
+|--------|---------|
+| **Type** | **GUARANTEED** = total cost < $1, profitable no matter which bucket wins. **EV+** = profitable in expectation based on the model, but not guaranteed. |
+| **Size** | Number of buckets in the cluster (2–4). |
+| **Ladder** | The bucket labels, e.g. "95°F or below + 96-97°F + 98-99°F". |
+| **Cost** | Total ask price for one share of every bucket ($). This is what you pay per "set" of shares. |
+| **Model P** | The model's probability that the temperature lands in any of the cluster's buckets. |
+| **Payout** | Guaranteed payout if any bucket wins = $1 / Cost. If Cost is $0.55, payout is $1.82 per $1 invested. |
+| **E[Profit]** | Expected profit per $1 invested, accounting for the model's probability. |
+| **ROI** | Return on investment per $1 = E[Profit] / $1. A +50% ROI means you expect $0.50 profit per $1 invested. |
+| **Per-bucket allocation** | How the $1 is split across buckets: model probability, ask price, dollar allocation, and shares to buy for each bucket. |
+
+Rows are sorted by ROI (highest expected return per dollar first).
+
+
+## How to Use It
+
+1. **Look for GUARANTEED ladders first.** These profit no matter what — the
+   total cost of buying all buckets is under $1, so the payout exceeds your
+   investment regardless of which bucket wins. These are rare but when they
+   exist, they're free money (minus market fees).
+
+2. **Use EV+ ladders for higher upside.** These aren't guaranteed but the model
+   says the temperature is more likely to land in your cluster than the market
+   price implies. The higher the ROI, the bigger the disconnect between model
+   and market.
+
+3. **Scale by dollar amount.** Every number is normalized to $1. Want to put
+   in $50? Multiply shares by 50. The ROI stays the same.
+
+4. **Check the date selector.** Today's market may already be resolved (or
+   nearly so), so ladders are more likely to appear for tomorrow.
+
+5. **Transitional days are best.** Ladders work when the model and market
+   disagree on where the temperature will land. This happens most on
+   transitional days (front passages, cloud cover changes) and at the 24–48
+   hour horizon.
+
+
+## Important Caveats
+
+- **This is not trade execution.** The dashboard identifies opportunities; you
+  execute manually on Kalshi.
+
+- **Ask prices move.** The displayed ask is the current market price. Buying
+  multiple buckets may move the market against you, especially in low-volume
+  markets.
+
+- **The model can be wrong.** EV+ ladders rely on the model's probability
+  being more accurate than the market's. If the model is systematically biased
+  for a particular station or weather pattern, the EV calculation is off.
+
+- **No ensemble filter yet.** The AlterEgo_eth strategy mentions an
+  "underdispersion filter" — when the ensemble spread is tighter than
+  historical, win probability rises. This system uses a single Gaussian
+  distribution, not an ensemble, so that filter is not implemented.
+
+- **Guaranteed doesn't mean risk-free.** Kalshi markets can have low
+  liquidity, wide spreads, or resolution disputes. "Guaranteed" means the
+  math works given the ask prices; it doesn't account for market mechanics.
+
+
+## Where the Data Comes From
+
+- **Model probabilities**: The existing forecast pipeline — HRRR
+  bias-corrected forecast, near-resolution adjustment from live METAR
+  observations, daily-high Gaussian distribution, left-truncated at the
+  observed high when observations are available.
+
+- **Market prices**: Live Kalshi API, fetched at dashboard generation time
+  (once per cron cycle, roughly hourly). Ask price is used for cost (what
+  you'd pay to buy YES). If ask is missing, bid is used as a fallback.
+
+- **Bucket structure**: Fetched live from the Kalshi market for each date.
+  The bucket width, alignment, and range shift day to day to match the
+  actual market structure.
